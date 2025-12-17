@@ -46,9 +46,11 @@ namespace monitor_services_api.Services
 
                         if (config != null)
                         {
-                            // Se não tem Zabbix específico, usa o global
-                            config.ZabbixServer ??= _globalConfig["Zabbix:Server"];
-                            config.ZabbixApiToken ??= _globalConfig["Zabbix:ApiToken"];
+                            // Se não tem Zabbix específico, usa o global ou .env
+                            config.ZabbixServer ??= _globalConfig["Zabbix:Server"]
+                                ?? Environment.GetEnvironmentVariable("ZABBIX_SERVER");
+                            config.ZabbixApiToken ??= _globalConfig["Zabbix:ApiToken"]
+                                ?? Environment.GetEnvironmentVariable("ZABBIX_API_TOKEN");
 
                             _configCache[clientId] = config;
                             Console.WriteLine($"✓ Cliente '{clientId}' carregado: {config.ClientName}");

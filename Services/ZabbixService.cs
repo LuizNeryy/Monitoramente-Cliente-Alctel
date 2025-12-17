@@ -22,9 +22,13 @@ namespace monitor_services_api.Services
             _http = http;
             _clientConfig = clientConfig;
             
-            var server = config["Zabbix:Server"] ?? "https://monitoramento.alctel.com.br/zabbix";
+            var server = config["Zabbix:Server"]
+                ?? Environment.GetEnvironmentVariable("ZABBIX_SERVER")
+                ?? "https://monitoramento.alctel.com.br/zabbix";
             _defaultApiUrl = $"{server}/api_jsonrpc.php";
-            _defaultApiToken = config["Zabbix:ApiToken"] ?? "";
+            _defaultApiToken = config["Zabbix:ApiToken"]
+                ?? Environment.GetEnvironmentVariable("ZABBIX_API_TOKEN")
+                ?? "";
 
             _jsonOpts = new JsonSerializerOptions
             {

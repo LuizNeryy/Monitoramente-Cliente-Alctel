@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Hosting.WindowsServices;
 using monitor_services_api.Services;
 
+// Carrega variáveis de ambiente do .env
+DotNetEnv.Env.Load();
+
 var builder = WebApplication.CreateBuilder(
     new WebApplicationOptions
     {

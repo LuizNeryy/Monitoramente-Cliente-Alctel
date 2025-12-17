@@ -1,6 +1,6 @@
 {
   "Version": 1,
-  "Hash": "9plIAvunXkfGixRcCYw8bALS1fpE5w8UgdEjeEX532U=",
+  "Hash": "p6vvbWGQ4ZNO0KL5FKlp4KY1oQcE5D/CsuXIaMyQRys=",
   "Source": "monitor-services-api",
   "BasePath": "_content/monitor-services-api",
   "Mode": "Default",
@@ -10,17 +10,17 @@
     {
       "Name": "monitor-services-api\\wwwroot",
       "Source": "monitor-services-api",
-      "ContentRoot": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\monitor-services-api\\wwwroot\\",
+      "ContentRoot": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\Monitoramente-Cliente-Alctel\\wwwroot\\",
       "BasePath": "_content/monitor-services-api",
       "Pattern": "**"
     }
   ],
   "Assets": [
     {
-      "Identity": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\monitor-services-api\\wwwroot\\Monitor.html",
+      "Identity": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\Monitoramente-Cliente-Alctel\\wwwroot\\Monitor.html",
       "SourceId": "monitor-services-api",
       "SourceType": "Discovered",
-      "ContentRoot": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\monitor-services-api\\wwwroot\\",
+      "ContentRoot": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\Monitoramente-Cliente-Alctel\\wwwroot\\",
       "BasePath": "_content/monitor-services-api",
       "RelativePath": "Monitor.html",
       "AssetKind": "All",
@@ -36,10 +36,10 @@
       "OriginalItemSpec": "wwwroot\\Monitor.html"
     },
     {
-      "Identity": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\monitor-services-api\\wwwroot\\web.config",
+      "Identity": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\Monitoramente-Cliente-Alctel\\wwwroot\\web.config",
       "SourceId": "monitor-services-api",
       "SourceType": "Discovered",
-      "ContentRoot": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\monitor-services-api\\wwwroot\\",
+      "ContentRoot": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\Monitoramente-Cliente-Alctel\\wwwroot\\",
       "BasePath": "_content/monitor-services-api",
       "RelativePath": "web.config",
       "AssetKind": "All",

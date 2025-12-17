@@ -1,0 +1,21 @@
+# Arquivo de variáveis de ambiente
+.env
+# Ignorar certificados e arquivos sensíveis
+certificado/
+*.pfx
+*.pem
+*.key
+*.crt
+*.cer
+*.jks
+*.p12
+*.env
+publish/**/certificado/
+bin/**/certificado/
+obj/**/certificado/
+# Ignorar arquivos de configuração sensíveis
+appsettings.json
+appsettings.Development.json
+clientes/*/config.json
+clientes/*/downtime_report.json
+clientes/*/downtime.txt

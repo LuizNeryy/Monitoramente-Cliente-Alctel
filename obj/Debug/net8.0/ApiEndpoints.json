@@ -1,0 +1,88 @@
+[
+  {
+    "ContainingType": "monitor_services_api.Controllers.MonitorController",
+    "Method": "GetAvailability",
+    "RelativePath": "api/availability",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "monitor_services_api.Controllers.MonitorController",
+    "Method": "GetDashboard",
+    "RelativePath": "api/dashboard",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "monitor_services_api.Controllers.MonitorController",
+    "Method": "GetHostInfo",
+    "RelativePath": "api/host-info",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "monitor_services_api.Controllers.MonitorController",
+    "Method": "GetItems",
+    "RelativePath": "api/items",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "monitor_services_api.Controllers.MonitorController",
+    "Method": "GetProblems",
+    "RelativePath": "api/problems",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "monitor_services_api.Controllers.MonitorController",
+    "Method": "GetServices",
+    "RelativePath": "api/services",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "monitor_services_api.Controllers.MonitorController",
+    "Method": "GetTriggers",
+    "RelativePath": "api/triggers",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "Program\u002B\u003C\u003Ec__DisplayClass0_0",
+    "Method": "\u003C\u003CMain\u003E$\u003Eb__5",
+    "RelativePath": "health",
+    "HttpMethod": "GET",
+    "IsController": false,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Void",
+        "MediaTypes": [],
+        "StatusCode": 200
+      }
+    ]
+  }
+]

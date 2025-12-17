@@ -1,0 +1,29 @@
+{
+  "Files": [
+    {
+      "Id": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\monitor-services-api\\wwwroot\\Monitor.html",
+      "PackagePath": "staticwebassets\\Monitor.html"
+    },
+    {
+      "Id": "C:\\Users\\luiz.costa\\OneDrive - Alctel\\Documentos\\GitHub\\monitor-services-api\\wwwroot\\web.config",
+      "PackagePath": "staticwebassets\\web.config"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.build.monitor-services-api.props",
+      "PackagePath": "build\\monitor-services-api.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildMultiTargeting.monitor-services-api.props",
+      "PackagePath": "buildMultiTargeting\\monitor-services-api.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildTransitive.monitor-services-api.props",
+      "PackagePath": "buildTransitive\\monitor-services-api.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.monitor-services-api.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

@@ -1,0 +1,120 @@
+{
+  "clientId": "supplier",
+  "periodDays": 30,
+  "generatedAt": "2025-12-16T15:17:52.0316141-03:00",
+  "totalDowntimeSeconds": 10860,
+  "totalDowntimeFormatted": "3h 1m",
+  "servicesCount": 5,
+  "servicesWithDowntime": 5,
+  "services": [
+    {
+      "serviceName": "CFY-FILA-SALVADOR",
+      "ipAddress": "172.31.202.41",
+      "totalDowntimeSeconds": 1650,
+      "totalDowntimeFormatted": "27m",
+      "incidentCount": 1,
+      "incidents": [
+        {
+          "startTime": "2025-12-01T16:06:02-03:00",
+          "endTime": "2025-12-01T16:33:32-03:00",
+          "durationSeconds": 1650,
+          "durationFormatted": "27m",
+          "triggerName": "\u0022CFY-FILA-SALVADOR\u0022 (CFY-FILA-SALVADOR) is not running (startup type automatic delayed)",
+          "isActive": false
+        }
+      ]
+    },
+    {
+      "serviceName": "CFY-URA-SALVADOR",
+      "ipAddress": "172.31.202.41",
+      "totalDowntimeSeconds": 2610,
+      "totalDowntimeFormatted": "43m",
+      "incidentCount": 2,
+      "incidents": [
+        {
+          "startTime": "2025-11-20T00:34:15-03:00",
+          "endTime": "2025-11-20T00:50:15-03:00",
+          "durationSeconds": 960,
+          "durationFormatted": "16m",
+          "triggerName": "\u0022CFY-URA-SALVADOR\u0022 (CFY-URA-SALVADOR) is not running (startup type automatic delayed)",
+          "isActive": false
+        },
+        {
+          "startTime": "2025-12-01T16:05:44-03:00",
+          "endTime": "2025-12-01T16:33:14-03:00",
+          "durationSeconds": 1650,
+          "durationFormatted": "27m",
+          "triggerName": "\u0022CFY-URA-SALVADOR\u0022 (CFY-URA-SALVADOR) is not running (startup type automatic delayed)",
+          "isActive": false
+        }
+      ]
+    },
+    {
+      "serviceName": "CFY-FILA-EMEC-PREMIUM",
+      "ipAddress": "172.31.202.41",
+      "totalDowntimeSeconds": 1650,
+      "totalDowntimeFormatted": "27m",
+      "incidentCount": 1,
+      "incidents": [
+        {
+          "startTime": "2025-12-01T16:05:59-03:00",
+          "endTime": "2025-12-01T16:33:29-03:00",
+          "durationSeconds": 1650,
+          "durationFormatted": "27m",
+          "triggerName": "\u0022CFY-FILA-EMEC-PREMIUM\u0022 (CFY-FILA-EMEC-PREMIUM) is not running (startup type automatic delayed)",
+          "isActive": false
+        }
+      ]
+    },
+    {
+      "serviceName": "CFY-URA-EMEC",
+      "ipAddress": "172.31.202.41",
+      "totalDowntimeSeconds": 2460,
+      "totalDowntimeFormatted": "41m",
+      "incidentCount": 2,
+      "incidents": [
+        {
+          "startTime": "2025-11-20T00:35:12-03:00",
+          "endTime": "2025-11-20T00:48:12-03:00",
+          "durationSeconds": 780,
+          "durationFormatted": "13m",
+          "triggerName": "\u0022CFY-URA-EMEC\u0022 (CFY-URA-EMEC) is not running (startup type automatic delayed)",
+          "isActive": false
+        },
+        {
+          "startTime": "2025-12-01T16:05:39-03:00",
+          "endTime": "2025-12-01T16:33:39-03:00",
+          "durationSeconds": 1680,
+          "durationFormatted": "28m",
+          "triggerName": "\u0022CFY-URA-EMEC\u0022 (CFY-URA-EMEC) is not running (startup type automatic delayed)",
+          "isActive": false
+        }
+      ]
+    },
+    {
+      "serviceName": "CFY-URA-PREMIUM",
+      "ipAddress": "172.31.202.41",
+      "totalDowntimeSeconds": 2490,
+      "totalDowntimeFormatted": "41m",
+      "incidentCount": 2,
+      "incidents": [
+        {
+          "startTime": "2025-11-20T00:34:13-03:00",
+          "endTime": "2025-11-20T00:48:13-03:00",
+          "durationSeconds": 840,
+          "durationFormatted": "14m",
+          "triggerName": "\u0022CFY-URA-PREMIUM\u0022 (CFY-URA-PREMIUM) is not running (startup type automatic delayed)",
+          "isActive": false
+        },
+        {
+          "startTime": "2025-12-01T16:05:43-03:00",
+          "endTime": "2025-12-01T16:33:13-03:00",
+          "durationSeconds": 1650,
+          "durationFormatted": "27m",
+          "triggerName": "\u0022CFY-URA-PREMIUM\u0022 (CFY-URA-PREMIUM) is not running (startup type automatic delayed)",
+          "isActive": false
+        }
+      ]
+    }
+  ]
+}

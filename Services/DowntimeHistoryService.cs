@@ -6,9 +6,7 @@ namespace monitor_services_api.Services
 
         public DowntimeHistoryService()
         {
-            // Volta para o diretório do projeto (sai de bin/Debug/net8.0)
-            var projectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
-            _clientsFolder = Path.Combine(projectRoot, "clientes");
+            _clientsFolder = Path.Combine(AppContext.BaseDirectory, "clientes");
         }
 
         public bool IsIncidentAlreadyOpened(string clientId, string serviceName, long startTime)
@@ -50,9 +48,16 @@ namespace monitor_services_api.Services
             var startDate = DateTimeOffset.FromUnixTimeSeconds(startTime).LocalDateTime;
             var recordedDate = DateTime.Now;
             
-            var logEntry = $"[{recordedDate:yyyy-MM-dd HH:mm:ss}] ABERTURA - Serviço: {serviceName} | Início: {startDate:yyyy-MM-dd HH:mm:ss} | UnixStart: {startTime}" + Environment.NewLine;
+            var logEntry = $"[{recordedDate:yyyy-MM-dd HH:mm:ss}] ABERTURA - Serviço: {serviceName} | Início: {startDate:yyyy-MM-dd HH:mm:ss} | UnixStart: {startTime}";
             
-            File.AppendAllText(clientFile, logEntry);
+            // Lê todas as linhas existentes
+            var allLines = File.Exists(clientFile) ? File.ReadAllLines(clientFile).ToList() : new List<string>();
+            
+            // Adiciona a nova linha
+            allLines.Add(logEntry);
+            
+            // Apaga e reescreve todo o arquivo
+            File.WriteAllLines(clientFile, allLines);
             Console.WriteLine($"[HISTORY] Incidente ABERTO: {serviceName} em {startDate:yyyy-MM-dd HH:mm:ss}");
         }
 
@@ -72,10 +77,16 @@ namespace monitor_services_api.Services
                           $"Fim: {endDate:yyyy-MM-dd HH:mm:ss} | " +
                           $"Downtime: {downtimeMinutes:F2} min | " +
                           $"UnixStart: {startTime} | " +
-                          $"UnixEnd: {endTime}" +
-                          Environment.NewLine;
+                          $"UnixEnd: {endTime}";
             
-            File.AppendAllText(clientFile, logEntry);
+            // Lê todas as linhas existentes
+            var allLines = File.Exists(clientFile) ? File.ReadAllLines(clientFile).ToList() : new List<string>();
+            
+            // Adiciona a nova linha
+            allLines.Add(logEntry);
+            
+            // Apaga e reescreve todo o arquivo
+            File.WriteAllLines(clientFile, allLines);
             Console.WriteLine($"[HISTORY] Incidente RESOLVIDO: {serviceName} - Downtime: {downtimeMinutes:F2} min");
         }
 
@@ -230,6 +241,59 @@ namespace monitor_services_api.Services
             {
                 File.WriteAllLines(clientFile, validLines);
                 Console.WriteLine($"[HISTORY] Limpeza: {lines.Length - validLines.Count} registros antigos removidos");
+            }
+        }
+
+        public void CleanRemovedServices(string clientId, HashSet<string> currentServices)
+        {
+            var clientFolder = Path.Combine(_clientsFolder, clientId);
+            var clientFile = Path.Combine(clientFolder, "downtime.txt");
+            
+            if (!File.Exists(clientFile))
+                return;
+            
+            var lines = File.ReadAllLines(clientFile);
+            var validLines = new List<string>();
+            
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                
+                try
+                {
+                    // Extrai o nome do serviço da linha
+                    string serviceName = "";
+                    
+                    if (line.Contains("Serviço:"))
+                    {
+                        var parts = line.Split('|');
+                        foreach (var part in parts)
+                        {
+                            if (part.Contains("Serviço:"))
+                            {
+                                serviceName = part.Split(':')[1].Trim();
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Se o serviço ainda existe na lista atual, mantém a linha
+                    if (!string.IsNullOrEmpty(serviceName) && 
+                        currentServices.Contains(serviceName, StringComparer.OrdinalIgnoreCase))
+                    {
+                        validLines.Add(line);
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+            }
+            
+            if (validLines.Count < lines.Length)
+            {
+                File.WriteAllLines(clientFile, validLines);
+                Console.WriteLine($"[HISTORY] Limpeza: {lines.Length - validLines.Count} registros de serviços removidos excluídos");
             }
         }
     }

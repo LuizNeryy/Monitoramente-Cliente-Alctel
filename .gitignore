@@ -1,5 +1,16 @@
 # Arquivo de variáveis de ambiente
 .env
+
+# Pastas de compilação e publicação
+bin/
+obj/
+publish/
+
+# Arquivos de usuário do Visual Studio
+*.user
+*.suo
+*.csproj.user
+
 # Ignorar certificados e arquivos sensíveis
 certificado/
 *.pfx
@@ -9,13 +20,10 @@ certificado/
 *.cer
 *.jks
 *.p12
-*.env
-publish/**/certificado/
-bin/**/certificado/
-obj/**/certificado/
-# Ignorar arquivos de configuração sensíveis
-appsettings.json
-appsettings.Development.json
+
+# Ignorar arquivos de configuração sensíveis (tokens/senhas)
 clientes/*/config.json
+
+# Arquivos gerados em tempo de execução
 clientes/*/downtime_report.json
 clientes/*/downtime.txt

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Monitoramento Alctel</title>
+    <link rel="icon" type="image/x-icon" href="https://alcdesk.alctel.com.br/img/favicon.ico">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        background: '#020617',
+                        surface: '#1e293b',
+                        border: '#334155',
+                        primary: '#38bdf8', 
+                        danger: '#f87171',
+                        text: {
+                            main: '#ffffff', 
+                            secondary: '#e2e8f0', 
+                            muted: '#94a3b8', 
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background min-h-screen flex items-center justify-center p-4">
+    
+    <div class="w-full max-w-md">
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <img src="https://alctel.com.br/wp-content/uploads/2025/10/logo_Prancheta-1.png" alt="Alctel" class="h-20 mx-auto mb-6">
+            <h1 class="text-3xl font-bold text-text-main mb-2">Monitoramento de Serviços</h1>
+            <p class="text-text-muted">Entre com suas credenciais para acessar</p>
+        </div>
+
+        <!-- Formulário de Login -->
+        <div class="bg-surface rounded-2xl shadow-glass border border-border p-8">
+            <form id="loginForm" onsubmit="fazerLogin(event)">
+                <!-- Usuário -->
+                <div class="mb-6">
+                    <label for="username" class="block text-text-secondary text-sm font-medium mb-2">
+                        Usuário
+                    </label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username"
+                        class="w-full px-4 py-3 bg-background border border-border rounded-lg text-text-main placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
+                        placeholder="Digite seu usuário"
+                        required
+                        autocomplete="username"
+                    >
+                </div>
+
+                <!-- Senha -->
+                <div class="mb-6">
+                    <label for="password" class="block text-text-secondary text-sm font-medium mb-2">
+                        Senha
+                    </label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password"
+                        class="w-full px-4 py-3 bg-background border border-border rounded-lg text-text-main placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
+                        placeholder="Digite sua senha"
+                        required
+                        autocomplete="current-password"
+                    >
+                </div>
+
+                <!-- Mensagem de Erro -->
+                <div id="errorMessage" class="hidden mb-6 p-4 bg-danger/10 border border-danger/50 rounded-lg text-danger text-sm">
+                </div>
+
+                <!-- Botão de Login -->
+                <button 
+                    type="submit" 
+                    id="loginButton"
+                    class="w-full bg-primary hover:bg-primary/90 text-background font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center"
+                >
+                    <span id="loginButtonText">Entrar</span>
+                    <svg id="loginSpinner" class="hidden animate-spin ml-2 h-5 w-5 text-background" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </form>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8 text-text-muted text-sm">
+            <p>© 2024 Alctel. Todos os direitos reservados.</p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        // Verifica se já está logado
+        window.onload = function() {
+            const token = localStorage.getItem('token');
+            const clientId = localStorage.getItem('clientId');
+            
+            if (token && clientId) {
+                // Já está logado, redireciona para o dashboard COM o parâmetro
+                window.location.href = `/Monitor.html?cliente=${clientId}`;
+            }
+        };
+
+        async function fazerLogin(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMessage');
+            const loginButton = document.getElementById('loginButton');
+            const loginButtonText = document.getElementById('loginButtonText');
+            const loginSpinner = document.getElementById('loginSpinner');
+            
+            // Esconde erro anterior
+            errorDiv.classList.add('hidden');
+            
+            // Mostra loading
+            loginButton.disabled = true;
+            loginButtonText.textContent = 'Entrando...';
+            loginSpinner.classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // O backend retorna em snake_case (client_id, client_name)
+                    const clientId = data.client_id;
+                    const clientName = data.client_name;
+                    const token = data.token;
+                    const expiresAt = data.expires_at;
+                    
+                    // Salva token e informações do cliente
+                    localStorage.setItem('token', token);
+                    localStorage.setItem('clientId', clientId);
+                    localStorage.setItem('clientName', clientName);
+                    localStorage.setItem('expiresAt', expiresAt);
+                    
+                    // Redireciona para o dashboard COM o parâmetro cliente
+                    window.location.href = `/Monitor.html?cliente=${clientId}`;
+                } else {
+                    const error = await response.json();
+                    mostrarErro(error.error || 'Usuário ou senha inválidos');
+                }
+            } catch (error) {
+                console.error('Erro ao fazer login:', error);
+                mostrarErro('Erro ao conectar com o servidor. Tente novamente.');
+            } finally {
+                // Remove loading
+                loginButton.disabled = false;
+                loginButtonText.textContent = 'Entrar';
+                loginSpinner.classList.add('hidden');
+            }
+        }
+        
+        function mostrarErro(mensagem) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = mensagem;
+            errorDiv.classList.remove('hidden');
+        }
+    </script>
+
+</body>
+</html>

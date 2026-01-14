@@ -57,7 +57,7 @@ namespace monitor_services_api.Services
             var token = _currentConfig.ZabbixApiToken ?? _defaultApiToken;
             _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
 
-            Console.WriteLine($"✓ Zabbix configurado para cliente '{clientId}' ({_currentServices?.Count ?? 0} serviços)");
+            Console.WriteLine($"✓ Zabbix configurado para cliente '{clientId}' ({_currentServices?.Count ?? 0} serviços no TXT)");
         }
 
         public string? GetServiceIp(string nomeServico)

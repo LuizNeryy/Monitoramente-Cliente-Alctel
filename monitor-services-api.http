@@ -1,6 +1,21 @@
-@monitor_services_api_HostAddress = http://localhost:5002
+@monitor_services_api_HostAddress = http://localhost:4000
 
-GET {{monitor_services_api_HostAddress}}/weatherforecast/
+### Health Check
+GET {{monitor_services_api_HostAddress}}/health
+Accept: application/json
+
+### Login
+POST {{monitor_services_api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "senha123"
+}
+
+### Get Monitor Status (requer autenticação)
+GET {{monitor_services_api_HostAddress}}/api/monitor/materdei
+Authorization: Bearer {{token}}
 Accept: application/json
 
 ###

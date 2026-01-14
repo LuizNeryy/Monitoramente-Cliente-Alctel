@@ -93,63 +93,55 @@ namespace monitor_services_api.Controllers
             if (!ConfigureClientContext(clientId))
                 return NotFound(new { error = $"Cliente '{clientId}' não encontrado" });
 
-            var allServices = new List<ServiceResponse>();
-
-            // Agrupa serviços por IP do host para otimizar chamadas
-            var servicesByIp = _zabbix.GetMonitoredServices()
-                .GroupBy(s => _zabbix.GetServiceIp(s))
-                .Where(g => g.Key != null)
-                .ToList();
-
-            foreach (var group in servicesByIp)
+            // LÊ DO ARQUIVO SALVO (super rápido, sem consultar Zabbix)
+            try
             {
-                var hostIp = group.Key!;
-                var servicesToFind = group.ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                // Busca o host pelo IP
-                var hosts = await _zabbix.GetHostsAsync(hostIp);
-                if (!hosts.Any())
+                var report = await _downtimeCalculation.GetSavedReportAsync(clientId);
+                
+                if (report != null && report.Services != null)
                 {
-                    Console.WriteLine($"⚠️ Host não encontrado para IP: {hostIp}");
-                    continue;
-                }
+                    // Retorna status dos serviços baseado no relatório salvo
+                    var services = _zabbix.GetMonitoredServices()
+                        .Select(serviceName =>
+                        {
+                            // Procura o serviço no relatório para ver se tem incidentes ativos
+                            var serviceReport = report.Services
+                                .FirstOrDefault(s => s.ServiceName.Equals(serviceName, StringComparison.OrdinalIgnoreCase));
+                            
+                            var hasActiveIncident = serviceReport?.Incidents?.Any(i => i.IsActive) ?? false;
+                            
+                            return new ServiceResponse
+                            {
+                                Name = serviceName,
+                                Status = hasActiveIncident ? "Stopped" : "Running",
+                                Active = !hasActiveIncident,
+                                Lastcheck = report.GeneratedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                            };
+                        })
+                        .OrderBy(s => s.Name)
+                        .ToList();
 
-                var hostid = hosts[0].Hostid;
-                var allItems = await _zabbix.GetItemsAsync(hostid, new { name = "*State of service*" });
-
-                // Processa os serviços encontrados neste host
-                foreach (var item in allItems)
-                {
-                    var name = item.Name;
-                    if (name.Contains('"'))
-                    {
-                        var start = name.IndexOf('"') + 1;
-                        var end = name.LastIndexOf('"');
-                        if (start > 0 && end > start) name = name[start..end];
-                    }
-                    else if (name.Contains(':'))
-                    {
-                        name = name.Split(':', 2)[1].Trim();
-                    }
-
-                    // Verifica se é um dos serviços monitorados deste grupo
-                    if (!servicesToFind.Contains(name)) continue;
-
-                    var code = int.TryParse(item.Lastvalue, out var c) ? c : 255;
-                    var serviceStatus = ServiceStatusMap.GetValueOrDefault(code, ("Unknown", false));
-
-                    allServices.Add(new ServiceResponse
-                    {
-                        Name = name,
-                        Status = serviceStatus.Item1,
-                        Active = serviceStatus.Item2,
-                        Lastcheck = long.TryParse(item.Lastclock, out var t)
-                            ? FromUnixTime(t).ToString("yyyy-MM-dd HH:mm:ss") : "N/A"
-                    });
+                    return Ok(services);
                 }
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SERVICES] Erro ao ler relatório: {ex.Message}");
+            }
 
-            return Ok(allServices.OrderBy(s => s.Name));
+            // FALLBACK: Se não tiver arquivo, retorna lista básica do servicos.txt
+            var basicServices = _zabbix.GetMonitoredServices()
+                .Select(name => new ServiceResponse
+                {
+                    Name = name,
+                    Status = "Unknown",
+                    Active = true,
+                    Lastcheck = "Aguardando dados..."
+                })
+                .OrderBy(s => s.Name)
+                .ToList();
+
+            return Ok(basicServices);
         }
 
         [HttpGet("{clientId}/problems")]
@@ -251,258 +243,48 @@ namespace monitor_services_api.Controllers
             if (!ConfigureClientContext(clientId))
                 return NotFound(new { error = $"Cliente '{clientId}' não encontrado" });
 
-            var timeFrom = ToUnixTime(DateTime.Now.AddDays(-30));
-            var timeTill = ToUnixTime(DateTime.Now);
-
-            // NÃO limpa registros - mantém histórico completo para análise
-            // _downtimeHistory.CleanOldRecords(clientId, ToUnixTime(DateTime.Now.AddDays(-60)));
-
-            // Agregadores
-            int totalServices = 0;
-            double totalDowntimeSec = 0;
-            int totalActiveProblems = 0;
-            int totalResolvedProblems = 0;
-            int totalTriggers = 0;
-            int totalCritical = 0;
-            int totalWarning = 0;
-            var allHosts = new List<string>();
-            var problemsProcessed = new HashSet<string>(); // Evita duplicação de problemas ativos entre hosts
-            var resolvedProblemsProcessed = new HashSet<string>(); // Evita duplicação de problemas resolvidos
-
-            // Processa cada host único
-            foreach (var hostIp in _zabbix.GetUniqueHostIps())
-            {
-                var hosts = await _zabbix.GetHostsAsync(hostIp);
-                if (!hosts.Any())
-                {
-                    Console.WriteLine($"⚠️ Host não encontrado para IP: {hostIp}");
-                    continue;
-                }
-
-                var host = hosts[0];
-                var hostid = host.Hostid;
-                allHosts.Add($"{host.Name} ({hostIp})");
-
-                // Serviços deste host - FILTRA APENAS OS DO TXT COM IP CORRETO
-                var allItems = await _zabbix.GetItemsAsync(hostid, new { name = "*State of service*" });
-                var hostServices = allItems.Where(s =>
-                {
-                    var name = s.Name;
-                    if (name.Contains('"'))
-                    {
-                        var start = name.IndexOf('"') + 1;
-                        var end = name.LastIndexOf('"');
-                        if (start > 0 && end > start) name = name[start..end];
-                    }
-                    else if (name.Contains(':'))
-                    {
-                        name = name.Split(':', 2)[1].Trim();
-                    }
-                    // CRÍTICO: Valida serviço + IP para evitar duplicação entre hosts
-                    var isMonitored = _zabbix.IsServicoMonitorado(name, hostIp);
-                    if (isMonitored)
-                        Console.WriteLine($"[SERVIÇO] {name} no host {hostIp} - monitorado");
-                    return isMonitored;
-                }).ToList();
-
-                var hostServiceNames = hostServices.Select(s => {
-                    var name = s.Name;
-                    if (name.Contains('"')) {
-                        var start = name.IndexOf('"') + 1;
-                        var end = name.LastIndexOf('"');
-                        if (start > 0 && end > start) name = name[start..end];
-                    }
-                    else if (name.Contains(':')) {
-                        name = name.Split(':', 2)[1].Trim();
-                    }
-                    return name;
-                }).ToList();
-                
-                Console.WriteLine($"[HOST {hostIp}] {hostServices.Count} serviços encontrados");
-                Console.WriteLine($"[HOST {hostIp}] Serviços: {string.Join(", ", hostServiceNames)}");
-                totalServices += hostServices.Count;
-
-                // Verifica estado ATUAL dos serviços (para detectar serviços parados sem problema registrado)
-                var servicesCurrentlyDown = new Dictionary<string, (long lastCheck, int statusCode)>();
-                foreach (var item in hostServices)
-                {
-                    var name = item.Name;
-                    if (name.Contains('"'))
-                    {
-                        var start = name.IndexOf('"') + 1;
-                        var end = name.LastIndexOf('"');
-                        if (start > 0 && end > start) name = name[start..end];
-                    }
-                    else if (name.Contains(':'))
-                    {
-                        name = name.Split(':', 2)[1].Trim();
-                    }
-
-                    var statusCode = int.TryParse(item.Lastvalue, out var c) ? c : 255;
-                    
-                    // Se o serviço NÃO está rodando (0 = Running)
-                    if (statusCode != 0)
-                    {
-                        var lastCheck = long.TryParse(item.Lastclock, out var lc) ? lc : timeTill;
-                        servicesCurrentlyDown[name.ToLower()] = (lastCheck, statusCode);
-                        Console.WriteLine($"[SLA] Serviço PARADO detectado: {name} (código {statusCode})");
-                    }
-                }
-
-                // Problemas deste host dos últimos 30 dias
-                var problems = await _zabbix.GetProblemsAsync(hostid, timeFrom);
-                var monitoredServices = _zabbix.GetMonitoredServices().Select(s => s.Trim().ToLowerInvariant()).ToHashSet();
-                
-                foreach (var p in problems)
-                {
-                    // Extrai nome do serviço do problema
-                    var problemName = p.Name;
-                    if (problemName.Contains('"'))
-                    {
-                        var start = problemName.IndexOf('"') + 1;
-                        var end = problemName.LastIndexOf('"');
-                        if (start > 0 && end > start) problemName = problemName[start..end];
-                    }
-                    else if (problemName.Contains(':'))
-                    {
-                        problemName = problemName.Split(':', 2)[1].Trim();
-                    }
-                    var problemNameLower = problemName.Trim().ToLowerInvariant();
-                    
-                    // Só processa problemas de serviços monitorados (do txt)
-                    if (!monitoredServices.Contains(problemNameLower)) continue;
-
-                    var clock = Math.Max(long.Parse(p.Clock), timeFrom);
-                    var rClock = long.TryParse(p.R_clock, out var r) && r > 0 ? r : 0;
-
-                    if (rClock > 0)
-                    {
-                        // Problema resolvido nos últimos 30 dias
-                        if (rClock >= timeFrom && !resolvedProblemsProcessed.Contains(problemNameLower))
-                        {
-                            totalResolvedProblems++;
-                            resolvedProblemsProcessed.Add(problemNameLower);
-                            Console.WriteLine($"[RESOLVED] {problemName} - resolvido em {FromUnixTime(rClock):yyyy-MM-dd HH:mm}");
-                        }
-                        // Calcula downtime apenas dentro da janela de 30 dias
-                        var downtimeStart = Math.Max(clock, timeFrom);
-                        var downtimeEnd = Math.Min(rClock, timeTill);
-                        var downtimeSecResolved = downtimeEnd - downtimeStart;
-                        totalDowntimeSec += downtimeSecResolved;
-                        // Salva no histórico se foi resolvido nos últimos 30 dias
-                        if (rClock >= timeFrom)
-                        {
-                            _downtimeHistory.SaveDowntimeRecord(
-                                clientId, 
-                                problemNameLower, 
-                                clock, 
-                                rClock, 
-                                downtimeSecResolved / 60.0
-                            );
-                        }
-                    }
-                    else
-                    {
-                        // Problema ativo
-                        if (!problemsProcessed.Contains(problemNameLower))
-                        {
-                            totalActiveProblems++;
-                            problemsProcessed.Add(problemNameLower);
-                            Console.WriteLine($"[ACTIVE] {problemName} - ativo desde {FromUnixTime(clock):yyyy-MM-dd HH:mm}");
-                        }
-                        
-                        // SEMPRE tenta salvar abertura (DowntimeHistoryService verifica duplicatas)
-                        _downtimeHistory.SaveIncidentOpened(clientId, problemNameLower, clock);
-                        
-                        totalDowntimeSec += timeTill - clock;
-                    }
-                }
-
-                // Verifica serviços parados que NÃO tiveram problema registrado
-                Console.WriteLine($"[DEBUG] Serviços parados encontrados: {servicesCurrentlyDown.Count}");
-                Console.WriteLine($"[DEBUG] Problemas ativos já processados: {string.Join(", ", problemsProcessed)}");
-                
-                foreach (var (serviceName, (lastCheck, statusCode)) in servicesCurrentlyDown)
-                {
-                    var serviceNameLower = serviceName.ToLower();
-                    
-                    // Se já foi processado como problema ativo, pula
-                    if (problemsProcessed.Contains(serviceNameLower))
-                    {
-                        Console.WriteLine($"[DEBUG] Serviço {serviceName} JÁ tem problema ativo registrado - pulando");
-                        continue;
-                    }
-                    
-                    // Serviço está parado mas não há problema ativo registrado
-                    // Conta como problema ativo e assume 30 dias de downtime (conservador)
-                    var downtime = 30 * 24 * 3600L;
-                    totalDowntimeSec += downtime;
-                    totalActiveProblems++;
-                    problemsProcessed.Add(serviceNameLower);
-                    
-                    Console.WriteLine($"[SLA] Serviço parado SEM problema registrado: {serviceName} (assumindo {downtime / 60.0:F0} min de downtime)");
-                }
-
-                // Triggers deste host
-                var triggers = await _zabbix.GetTriggersAsync(hostid);
-                totalTriggers += triggers.Count;
-                totalCritical += triggers.Count(t => int.Parse(t.Priority) >= 4);
-                totalWarning += triggers.Count(t => int.Parse(t.Priority) >= 2 && int.Parse(t.Priority) < 4);
-            }
-
-            // ===== BUSCA DADOS DO RELATÓRIO JSON =====
+            // ===== LÊ APENAS DO ARQUIVO JSON SALVO - SEM CHAMADAS AO ZABBIX =====
             var report = await _downtimeCalculation.GetSavedReportAsync(clientId);
             
             if (report == null)
             {
-                // Se não houver relatório, calcula um novo
-                report = await _downtimeCalculation.CalculateClientDowntimeAsync(clientId, 30);
+                return StatusCode(503, new { error = "Dados ainda não disponíveis. Aguarde o próximo ciclo de atualização." });
             }
 
-            if (report == null)
-            {
-                return StatusCode(500, new { error = "Erro ao obter dados de downtime" });
-            }
-
-            // Retorna os dados do JSON diretamente
+            // Calcula disponibilidade
             var availability = report.TotalDowntimeSeconds > 0 
                 ? Math.Round((1 - (report.TotalDowntimeSeconds / (double)(report.PeriodDays * 24 * 3600 * report.ServicesCount))) * 100, 2)
                 : 100.0;
 
-            // Conta problemas ativos e resolvidos direto do JSON
-            int activeProblemsFromJson = 0;
-            int resolvedProblemsFromJson = 0;
+            // Conta INCIDENTES ativos e resolvidos direto do JSON
+            int activeIncidentsCount = 0;
+            int resolvedIncidentsCount = 0;
             
             foreach (var service in report.Services)
             {
                 if (service.Incidents != null && service.Incidents.Any())
                 {
-                    // Conta se tem pelo menos 1 incidente ativo
-                    if (service.Incidents.Any(i => i.IsActive))
-                    {
-                        activeProblemsFromJson++;
-                    }
-                    // Conta se tem pelo menos 1 incidente resolvido
-                    if (service.Incidents.Any(i => !i.IsActive))
-                    {
-                        resolvedProblemsFromJson++;
-                    }
+                    activeIncidentsCount += service.Incidents.Count(i => i.IsActive);
+                    resolvedIncidentsCount += service.Incidents.Count(i => !i.IsActive);
                 }
             }
 
             Console.WriteLine($"[DASHBOARD][JSON] Total Downtime: {report.TotalDowntimeFormatted}");
             Console.WriteLine($"[DASHBOARD][JSON] Serviços: {report.ServicesCount}");
             Console.WriteLine($"[DASHBOARD][JSON] Disponibilidade: {availability:F2}%");
-            Console.WriteLine($"[DASHBOARD][JSON] Problemas Ativos: {activeProblemsFromJson}");
-            Console.WriteLine($"[DASHBOARD][JSON] Problemas Resolvidos: {resolvedProblemsFromJson}");
-            Console.WriteLine($"[DASHBOARD][JSON] Total de Problemas: {activeProblemsFromJson + resolvedProblemsFromJson}");
+            Console.WriteLine($"[DASHBOARD][JSON] Incidentes Ativos: {activeIncidentsCount}");
+            Console.WriteLine($"[DASHBOARD][JSON] Incidentes Resolvidos: {resolvedIncidentsCount}");
+            Console.WriteLine($"[DASHBOARD][JSON] Total de Incidentes: {activeIncidentsCount + resolvedIncidentsCount}");
+
+            // Pega IPs dos hosts do config do Zabbix (não faz chamada, apenas lê config)
+            var hostIps = _zabbix.GetUniqueHostIps().ToList();
 
             return Ok(new DashboardResponse
             {
                 Host = new DashboardHost
                 {
-                    Name = $"{clientId.ToUpper()} - {_zabbix.GetUniqueHostIps().Count()} host(s)",
-                    Ip = string.Join(", ", _zabbix.GetUniqueHostIps()),
+                    Name = $"{clientId.ToUpper()} - {hostIps.Count} host(s)",
+                    Ip = string.Join(", ", hostIps),
                     Status = "Online",
                     Available = "1"
                 },
@@ -515,15 +297,15 @@ namespace monitor_services_api.Controllers
                 },
                 Problems = new DashboardProblems
                 {
-                    Total = activeProblemsFromJson + resolvedProblemsFromJson,
-                    Active = activeProblemsFromJson,
-                    Resolved = resolvedProblemsFromJson
+                    Total = activeIncidentsCount + resolvedIncidentsCount,
+                    Active = activeIncidentsCount,
+                    Resolved = resolvedIncidentsCount
                 },
                 Triggers = new DashboardTriggers
                 {
-                    Total = totalTriggers,
-                    Critical = totalCritical,
-                    Warning = totalWarning
+                    Total = 0,  // Não conta mais triggers em tempo real
+                    Critical = 0,
+                    Warning = 0
                 }
             });
         }
@@ -603,13 +385,7 @@ namespace monitor_services_api.Controllers
                 var report = await _downtimeCalculation.GetSavedReportAsync(clientId);
                 
                 if (report == null)
-                {
-                    // Se não houver relatório, calcula um novo
-                    report = await _downtimeCalculation.CalculateClientDowntimeAsync(clientId, 30);
-                }
-
-                if (report == null)
-                    return StatusCode(500, new { error = "Erro ao obter dados de downtime" });
+                    return StatusCode(503, new { error = "Dados ainda não disponíveis. Aguarde o próximo ciclo de atualização." });
 
                 // Retorna apenas o resumo
                 return Ok(new

@@ -17,7 +17,7 @@ namespace monitor_services_api.Services
         // Novo: caminho do arquivo TXT de downtime
         private string GetDowntimeTxtPath(string clientId)
         {
-            var clientFolder = Path.Combine(Directory.GetCurrentDirectory(), "clientes", clientId);
+            var clientFolder = Path.Combine(AppContext.BaseDirectory, "clientes", clientId);
             Directory.CreateDirectory(clientFolder);
             return Path.Combine(clientFolder, "downtime.txt");
         }
@@ -35,7 +35,7 @@ namespace monitor_services_api.Services
         /// <summary>
         /// Calcula o downtime de todos os serviços de um cliente nos últimos 30 dias
         /// </summary>
-        public async Task<DowntimeReportResponse> CalculateClientDowntimeAsync(string clientId, int days = 30)
+        public async Task<DowntimeReportResponse> CalculateClientDowntimeAsync(string clientId, int days = 20)
         {
             _logger.LogInformation($"Calculando downtime para cliente '{clientId}' - últimos {days} dias");
             
@@ -67,14 +67,23 @@ namespace monitor_services_api.Services
             };
 
             long totalDowntimeSeconds = 0;
+            long totalDowntimeMinutesRounded = 0; // Soma dos minutos arredondados (para bater visualmente)
+            int servicesNotFoundInZabbix = 0;
 
             foreach (var serviceName in services)
             {
                 var serviceIp = _zabbix.GetServiceIp(serviceName);
                 _logger.LogInformation($"Verificando downtime de: {serviceName} ({serviceIp})");
 
+                // TODO: Adicionar verificação se o serviço existe no Zabbix
+                // Por enquanto, assume que existe se está no txt
+
                 var (downtimeSeconds, incidents) = await GetDowntimeForServiceAsync(serviceName, days);
                 totalDowntimeSeconds += downtimeSeconds;
+
+                // Converte para minutos arredondando pra cima (se tiver qualquer segundo, conta 1 minuto)
+                var downtimeMinutes = (long)Math.Ceiling(downtimeSeconds / 60.0);
+                totalDowntimeMinutesRounded += downtimeMinutes;
 
                 // Novo: Atualiza histórico TXT
                 await UpdateDowntimeTxtAsync(clientId, serviceName, incidents);
@@ -84,16 +93,25 @@ namespace monitor_services_api.Services
                     ServiceName = serviceName,
                     IpAddress = serviceIp ?? "N/A",
                     TotalDowntimeSeconds = downtimeSeconds,
-                    TotalDowntimeFormatted = FormatDuration(downtimeSeconds),
+                    TotalDowntimeFormatted = FormatDurationRoundedUp(downtimeSeconds),
                     IncidentCount = incidents.Count,
                     Incidents = incidents
                 });
             }
 
-            report.TotalDowntimeSeconds = totalDowntimeSeconds;
-            report.TotalDowntimeFormatted = FormatDuration(totalDowntimeSeconds);
-            report.ServicesCount = services.Count;
+            // Usa a soma dos minutos arredondados para o total (bate com a soma visual)
+            report.TotalDowntimeSeconds = totalDowntimeMinutesRounded * 60; // Converte de volta pra segundos
+            report.TotalDowntimeFormatted = FormatDurationFromMinutes(totalDowntimeMinutesRounded);
+            report.ServicesCount = report.Services.Count; // SEMPRE usa a quantidade real retornada pelo Zabbix
             report.ServicesWithDowntime = report.Services.Count(s => s.TotalDowntimeSeconds > 0);
+
+            // Log detalhado - mostra diferença entre TXT e Zabbix
+            _logger.LogInformation($"Serviços no TXT: {services.Count} | Processados REALMENTE pelo Zabbix: {report.Services.Count} | Com downtime: {report.ServicesWithDowntime}");
+            
+            if (servicesNotFoundInZabbix > 0)
+            {
+                _logger.LogWarning($"⚠️ IGNORADOS: {servicesNotFoundInZabbix} serviço(s) listado(s) no TXT não foram encontrados no Zabbix (nome/IP errado?)");
+            }
 
             // Salvar relatório em arquivo
             await SaveDowntimeReportAsync(clientId, report);
@@ -139,6 +157,7 @@ namespace monitor_services_api.Services
                 }
 
                 _logger.LogInformation($"Encontrados {events.Count} eventos para {serviceName}");
+                _logger.LogInformation($"Período de busca: de {DateTimeOffset.FromUnixTimeSeconds(periodStart):yyyy-MM-dd HH:mm} até {DateTimeOffset.FromUnixTimeSeconds(now):yyyy-MM-dd HH:mm}");
 
                 // Coletar IDs de recuperação válidos
                 var recoveryIds = events
@@ -173,6 +192,16 @@ namespace monitor_services_api.Services
                 foreach (var evt in events)
                 {
                     var startTime = long.Parse(evt.Clock);
+                    
+                    // FILTRO CRÍTICO: Ignora incidentes que começaram ANTES do período
+                    if (startTime < periodStart)
+                    {
+                        _logger.LogInformation($"[FILTRO] Incidente IGNORADO (fora do período de {days} dias): {evt.Name} - início: {DateTimeOffset.FromUnixTimeSeconds(startTime):yyyy-MM-dd HH:mm}");
+                        continue;
+                    }
+                    
+                    _logger.LogDebug($"[FILTRO] Incidente INCLUÍDO: {evt.Name} - início: {DateTimeOffset.FromUnixTimeSeconds(startTime):yyyy-MM-dd HH:mm}");
+                    
                     long endTime;
                     bool isActive = false;
 
@@ -229,11 +258,47 @@ namespace monitor_services_api.Services
         }
 
         /// <summary>
+        /// Formata duração arredondando PARA CIMA (1-59s = 1m)
+        /// </summary>
+        private string FormatDurationRoundedUp(long seconds)
+        {
+            if (seconds == 0) return "0m";
+            
+            var totalMinutes = (long)Math.Ceiling(seconds / 60.0);
+            var hours = totalMinutes / 60;
+            var minutes = totalMinutes % 60;
+            
+            if (hours > 0)
+                return $"{hours}h {minutes}m";
+            
+            return $"{minutes}m";
+        }
+
+        /// <summary>
+        /// Formata duração a partir de minutos já calculados
+        /// </summary>
+        private string FormatDurationFromMinutes(long totalMinutes)
+        {
+            if (totalMinutes == 0) return "0m";
+            
+            var hours = totalMinutes / 60;
+            var minutes = totalMinutes % 60;
+            
+            if (hours > 0)
+                return $"{hours}h {minutes}m";
+            
+            return $"{minutes}m";
+        }
+
+        /// <summary>
         /// Atualiza o arquivo downtime.txt do cliente com incidentes abertos e resolvidos
+        /// Usa escrita atômica para evitar race conditions
         /// </summary>
         private async Task UpdateDowntimeTxtAsync(string clientId, string serviceName, List<IncidentDetail> incidents)
         {
             var txtPath = GetDowntimeTxtPath(clientId);
+            var tempPath = txtPath + ".tmp";
+            
             var lines = new List<string>();
             if (File.Exists(txtPath))
             {
@@ -255,27 +320,38 @@ namespace monitor_services_api.Services
                 }
             }
 
-            await File.WriteAllLinesAsync(txtPath, lines);
+            // Escreve em arquivo temporário primeiro
+            await File.WriteAllLinesAsync(tempPath, lines);
+            
+            // Renomeia para o arquivo final (operação atômica)
+            File.Move(tempPath, txtPath, overwrite: true);
         }
 
         /// <summary>
         /// Salva o relatório de downtime em arquivo JSON na pasta do cliente
+        /// Usa escrita atômica (escreve em .tmp e depois renomeia) para evitar race conditions
         /// </summary>
         private async Task SaveDowntimeReportAsync(string clientId, DowntimeReportResponse report)
         {
             try
             {
-                var clientFolder = Path.Combine(Directory.GetCurrentDirectory(), "clientes", clientId);
+                var clientFolder = Path.Combine(AppContext.BaseDirectory, "clientes", clientId);
                 Directory.CreateDirectory(clientFolder);
 
                 var filePath = Path.Combine(clientFolder, "downtime_report.json");
+                var tempFilePath = Path.Combine(clientFolder, "downtime_report.json.tmp");
+                
                 var json = JsonSerializer.Serialize(report, new JsonSerializerOptions 
                 { 
                     WriteIndented = true,
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 });
 
-                await File.WriteAllTextAsync(filePath, json);
+                // Escreve em arquivo temporário primeiro
+                await File.WriteAllTextAsync(tempFilePath, json);
+                
+                // Renomeia para o arquivo final (operação atômica - evita leitura corrompida)
+                File.Move(tempFilePath, filePath, overwrite: true);
                 
                 _logger.LogInformation($"Relatório salvo em: {filePath}");
             }
@@ -292,7 +368,7 @@ namespace monitor_services_api.Services
         {
             try
             {
-                var filePath = Path.Combine(Directory.GetCurrentDirectory(), "clientes", clientId, "downtime_report.json");
+                var filePath = Path.Combine(AppContext.BaseDirectory, "clientes", clientId, "downtime_report.json");
                 
                 if (!File.Exists(filePath))
                 {

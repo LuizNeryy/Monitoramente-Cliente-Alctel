@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\build\monitor-services-api.props" />
-</Project>

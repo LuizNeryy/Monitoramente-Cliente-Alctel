@@ -1,8 +1,14 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Hosting.WindowsServices;
+using Microsoft.IdentityModel.Tokens;
 using monitor_services_api.Services;
 
-// Carrega variáveis de ambiente do .env
-DotNetEnv.Env.Load();
+// Carrega variáveis de ambiente do .env (se existir)
+if (File.Exists(".env"))
+{
+    DotNetEnv.Env.Load();
+}
 
 var builder = WebApplication.CreateBuilder(
     new WebApplicationOptions
@@ -31,6 +37,36 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<ClientConfigService>();
 builder.Services.AddSingleton<DowntimeHistoryService>();
 builder.Services.AddScoped<DowntimeCalculationService>();
+builder.Services.AddScoped<AuthService>();
+
+// Registra o Background Service que atualiza dados a cada 1 minuto
+builder.Services.AddHostedService<DashboardUpdateService>();
+
+// Configuração JWT
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "MonitorServicesAlctelSecretKey2024!@#$MinimumLength32Characters";
+var key = Encoding.UTF8.GetBytes(jwtKey);
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "MonitorServicesAlctel",
+        ValidAudience = builder.Configuration["Jwt:Audience"] ?? "MonitorServicesClients",
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ClockSkew = TimeSpan.Zero
+    };
+});
+
+builder.Services.AddAuthorization();
 
 builder.Services.AddHttpClient<IZabbixService, ZabbixService>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
@@ -72,11 +108,14 @@ if (app.Environment.IsDevelopment())
 // Aplica CORS globalmente
 app.UseCors("AllowAll");
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.UseStaticFiles();
 app.MapControllers();
 
-// Rota raiz
-app.MapGet("/", () => Results.Redirect("/Monitor.html"));
+// Rota raiz - redireciona para login
+app.MapGet("/", () => Results.Redirect("/login.html"));
 
 // Rota cliente - precisa vir DEPOIS das rotas específicas
 app.MapGet("/{clientId:regex(^[a-zA-Z0-9-]+$)}", (string clientId, ClientConfigService clientConfig) =>
@@ -84,7 +123,7 @@ app.MapGet("/{clientId:regex(^[a-zA-Z0-9-]+$)}", (string clientId, ClientConfigS
     if (!clientConfig.ClientExists(clientId))
         return Results.NotFound(new { error = $"Cliente '{clientId}' não encontrado" });
     
-    return Results.Redirect($"/Monitor.html?cliente={clientId}");
+    return Results.Redirect($"/login.html");
 });
 
 // Health endpoint simples

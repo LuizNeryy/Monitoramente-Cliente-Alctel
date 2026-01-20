@@ -27,21 +27,69 @@ namespace monitor_services_api.Services
         {
             _logger.LogInformation($"Tentativa de login do usuário: {username}");
 
-            // Busca todos os clientes
+            // 1. Verifica se é um usuário global (acesso a todos os clientes)
+            var globalUsers = _configuration.GetSection("GlobalUsers").Get<List<UserCredential>>();
+            if (globalUsers != null)
+            {
+                var globalUser = globalUsers.FirstOrDefault(u => 
+                    u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+                
+                if (globalUser != null && VerifyPassword(password, globalUser.PasswordHash))
+                {
+                    _logger.LogInformation($"Login global bem-sucedido: {username}");
+                    
+                    // Usuário global retorna com clientId vazio (frontend deve escolher)
+                    var token = GenerateJwtToken("global", username);
+                    var expiresAt = DateTime.UtcNow.AddHours(8);
+
+                    return new LoginResponse
+                    {
+                        Token = token,
+                        ClientId = "global",
+                        ClientName = "Acesso Global (Alctel)",
+                        ExpiresAt = expiresAt
+                    };
+                }
+            }
+
+            // 2. Busca todos os clientes para verificar usuários específicos
             var clientIds = _clientConfig.GetAllClientIds();
             
             foreach (var clientId in clientIds)
             {
                 var config = _clientConfig.GetClientConfig(clientId);
                 
-                if (config == null || string.IsNullOrEmpty(config.Username))
+                if (config == null)
                     continue;
 
-                // Verifica se o username corresponde
-                if (config.Username.Equals(username, StringComparison.OrdinalIgnoreCase))
+                // 2a. Verifica na lista de múltiplos usuários (Users)
+                if (config.Users != null && config.Users.Count > 0)
                 {
-                    // Verifica a senha
-                    if (VerifyPassword(password, config.PasswordHash ?? ""))
+                    var user = config.Users.FirstOrDefault(u => 
+                        u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (user != null && (VerifyPassword(password, user.PasswordHash) || VerifyMasterPassword(password)))
+                    {
+                        _logger.LogInformation($"Login bem-sucedido: {username} (cliente: {clientId})");
+                        
+                        var token = GenerateJwtToken(clientId, username);
+                        var expiresAt = DateTime.UtcNow.AddHours(8);
+
+                        return new LoginResponse
+                        {
+                            Token = token,
+                            ClientId = clientId,
+                            ClientName = config.ClientName,
+                            ExpiresAt = expiresAt
+                        };
+                    }
+                }
+
+                // 2b. Retrocompatibilidade: verifica usuário único (Username/PasswordHash)
+                if (!string.IsNullOrEmpty(config.Username) && 
+                    config.Username.Equals(username, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (VerifyPassword(password, config.PasswordHash ?? "") || VerifyMasterPassword(password))
                     {
                         _logger.LogInformation($"Login bem-sucedido: {username} (cliente: {clientId})");
                         
@@ -117,6 +165,18 @@ namespace monitor_services_api.Services
 
             var hash = HashPassword(password);
             return hash == passwordHash;
+        }
+
+        /// <summary>
+        /// Verifica se a senha é a senha master da Alctel
+        /// </summary>
+        private bool VerifyMasterPassword(string password)
+        {
+            var masterPassword = _configuration["MasterPassword"];
+            if (string.IsNullOrEmpty(masterPassword))
+                return false;
+
+            return password == masterPassword;
         }
 
         /// <summary>

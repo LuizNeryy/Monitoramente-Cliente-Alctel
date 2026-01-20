@@ -19,4 +19,10 @@ namespace monitor_services_api.Models
         public string ClientId { get; set; } = string.Empty;
         public string Username { get; set; } = string.Empty;
     }
+
+    public class UserCredential
+    {
+        public string Username { get; set; } = string.Empty;
+        public string PasswordHash { get; set; } = string.Empty;
+    }
 }

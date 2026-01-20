@@ -8,5 +8,6 @@ namespace monitor_services_api.Models
         public string? ZabbixApiToken { get; set; }
         public string? Username { get; set; }
         public string? PasswordHash { get; set; }
+        public List<UserCredential>? Users { get; set; }
     }
 }

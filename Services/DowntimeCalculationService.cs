@@ -134,21 +134,48 @@ namespace monitor_services_api.Services
 
             try
             {
-                // Busca eventos de problema (value=1) que contenham o nome do serviço E "is not running"
-                var events = await _zabbix.RequestAsync<List<ZabbixEvent>>("event.get", new
+                // IMPORTANTE: Busca o host específico pelo IP para filtrar eventos apenas desse servidor
+                var serviceIp = _zabbix.GetServiceIp(serviceName);
+                List<string> hostIds = null;
+                
+                if (!string.IsNullOrEmpty(serviceIp))
                 {
-                    output = new[] { "eventid", "clock", "r_eventid", "name" },
-                    search = new
+                    var hosts = await _zabbix.GetHostsAsync(serviceIp);
+                    if (hosts != null && hosts.Any())
+                    {
+                        hostIds = hosts.Select(h => h.Hostid).ToList();
+                        _logger.LogDebug($"Filtrando eventos apenas do(s) host(s) com IP {serviceIp}: {string.Join(", ", hostIds)}");
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Nenhum host encontrado no Zabbix com IP {serviceIp} para o serviço {serviceName}");
+                        return (0, new List<IncidentDetail>());
+                    }
+                }
+
+                // Busca eventos de problema (value=1) que contenham o nome do serviço E "is not running"
+                var requestParams = new Dictionary<string, object>
+                {
+                    ["output"] = new[] { "eventid", "clock", "r_eventid", "name" },
+                    ["search"] = new
                     {
                         name = new[] { serviceName, "is not running" }
                     },
-                    searchByAny = false, // Garante AND (ambos os termos devem estar presentes)
-                    time_from = periodStart,
-                    time_till = now,
-                    value = 1, // Apenas eventos de PROBLEMA
-                    sortfield = new[] { "clock" },
-                    sortorder = "ASC"
-                });
+                    ["searchByAny"] = false, // Garante AND (ambos os termos devem estar presentes)
+                    ["time_from"] = periodStart,
+                    ["time_till"] = now,
+                    ["value"] = 1, // Apenas eventos de PROBLEMA
+                    ["sortfield"] = new[] { "clock" },
+                    ["sortorder"] = "ASC"
+                };
+
+                // CORREÇÃO CRÍTICA: Adiciona filtro por hostids se disponível
+                if (hostIds != null && hostIds.Any())
+                {
+                    requestParams["hostids"] = hostIds;
+                }
+
+                var events = await _zabbix.RequestAsync<List<ZabbixEvent>>("event.get", requestParams);
 
                 if (events == null || !events.Any())
                 {

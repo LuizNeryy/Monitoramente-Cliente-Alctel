@@ -68,7 +68,7 @@ namespace monitor_services_api.Services
                     var user = config.Users.FirstOrDefault(u => 
                         u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
                     
-                    if (user != null && (VerifyPassword(password, user.PasswordHash) || VerifyMasterPassword(password)))
+                    if (user != null && VerifyPassword(password, user.PasswordHash))
                     {
                         _logger.LogInformation($"Login bem-sucedido: {username} (cliente: {clientId})");
                         
@@ -89,7 +89,7 @@ namespace monitor_services_api.Services
                 if (!string.IsNullOrEmpty(config.Username) && 
                     config.Username.Equals(username, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (VerifyPassword(password, config.PasswordHash ?? "") || VerifyMasterPassword(password))
+                    if (VerifyPassword(password, config.PasswordHash ?? ""))
                     {
                         _logger.LogInformation($"Login bem-sucedido: {username} (cliente: {clientId})");
                         
@@ -167,17 +167,7 @@ namespace monitor_services_api.Services
             return hash == passwordHash;
         }
 
-        /// <summary>
-        /// Verifica se a senha é a senha master da Alctel
-        /// </summary>
-        private bool VerifyMasterPassword(string password)
-        {
-            var masterPassword = _configuration["MasterPassword"];
-            if (string.IsNullOrEmpty(masterPassword))
-                return false;
 
-            return password == masterPassword;
-        }
 
         /// <summary>
         /// Extrai o clientId do token JWT

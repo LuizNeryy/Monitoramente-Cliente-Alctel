@@ -1,1 +1,6 @@
-# Nenhum arquivo será ignorado - tudo será versionado
+# Arquivos sensíveis com credenciais
+.env
+
+# Pastas de compilação (podem ser regeneradas)
+bin/
+obj/

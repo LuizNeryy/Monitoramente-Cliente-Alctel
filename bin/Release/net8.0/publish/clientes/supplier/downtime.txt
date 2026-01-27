@@ -1,1 +1,0 @@
-[RESOLVIDO] Serviço: CFY-URA-EMEC | Início: 2025-12-23 19:33:39 | Fim: 2025-12-23 19:34:09 | Duração: 0m | Trigger: "CFY-URA-EMEC" (CFY-URA-EMEC) is not running (startup type automatic delayed)

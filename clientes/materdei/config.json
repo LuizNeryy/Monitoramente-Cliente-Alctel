@@ -1,8 +1,6 @@
 {
   "ClientId": "materdei",
   "ClientName": "Materdei",
-  "ZabbixServer": null,
-  "ZabbixApiToken": null,
   "Users": [
     {
       "Username": "materdei",

@@ -1,6 +1,0 @@
-[RESOLVIDO] Serviço: CFY-FILA-SALVADOR | Início: 2026-01-23 20:46:02 | Fim: 2026-01-23 21:00:32 | Duração: 14m | Trigger: "CFY-FILA-SALVADOR" (CFY-FILA-SALVADOR) is not running (startup type automatic delayed)
-[RESOLVIDO] Serviço: CFY-URA-SALVADOR | Início: 2026-01-23 20:49:14 | Fim: 2026-01-23 21:00:14 | Duração: 11m | Trigger: "CFY-URA-SALVADOR" (CFY-URA-SALVADOR) is not running (startup type automatic delayed)
-[RESOLVIDO] Serviço: CFY-FILA-EMEC-PREMIUM | Início: 2026-01-23 20:45:29 | Fim: 2026-01-23 21:00:29 | Duração: 15m | Trigger: "CFY-FILA-EMEC-PREMIUM" (CFY-FILA-EMEC-PREMIUM) is not running (startup type automatic delayed)
-[RESOLVIDO] Serviço: CFY-FILA-EMEC-PREMIUM | Início: 2026-01-26 10:56:29 | Fim: 2026-01-26 10:56:59 | Duração: 0m | Trigger: "CFY-FILA-EMEC-PREMIUM" (CFY-FILA-EMEC-PREMIUM) is not running (startup type automatic delayed)
-[RESOLVIDO] Serviço: CFY-URA-EMEC | Início: 2026-01-23 20:48:09 | Fim: 2026-01-23 20:59:39 | Duração: 11m | Trigger: "CFY-URA-EMEC" (CFY-URA-EMEC) is not running (startup type automatic delayed)
-[RESOLVIDO] Serviço: CFY-URA-PREMIUM | Início: 2026-01-23 20:49:13 | Fim: 2026-01-23 21:00:13 | Duração: 11m | Trigger: "CFY-URA-PREMIUM" (CFY-URA-PREMIUM) is not running (startup type automatic delayed)

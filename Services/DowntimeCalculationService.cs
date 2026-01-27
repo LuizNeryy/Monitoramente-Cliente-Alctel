@@ -42,7 +42,7 @@ namespace monitor_services_api.Services
             if (!_clientConfig.ClientExists(clientId))
             {
                 _logger.LogWarning($"Cliente '{clientId}' não encontrado");
-                return null;
+                return null!;
             }
 
             _zabbix.SetCurrentClient(clientId);
@@ -136,7 +136,7 @@ namespace monitor_services_api.Services
             {
                 // IMPORTANTE: Busca o host específico pelo IP para filtrar eventos apenas desse servidor
                 var serviceIp = _zabbix.GetServiceIp(serviceName);
-                List<string> hostIds = null;
+                List<string>? hostIds = null;
                 
                 if (!string.IsNullOrEmpty(serviceIp))
                 {

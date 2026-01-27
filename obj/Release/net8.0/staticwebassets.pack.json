@@ -13,19 +13,19 @@
       "PackagePath": "staticwebassets\\web.config"
     },
     {
-      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.build.monitor-services-api.props",
+      "Id": "obj\\Release\\net8.0\\staticwebassets\\msbuild.build.monitor-services-api.props",
       "PackagePath": "build\\monitor-services-api.props"
     },
     {
-      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildMultiTargeting.monitor-services-api.props",
+      "Id": "obj\\Release\\net8.0\\staticwebassets\\msbuild.buildMultiTargeting.monitor-services-api.props",
       "PackagePath": "buildMultiTargeting\\monitor-services-api.props"
     },
     {
-      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildTransitive.monitor-services-api.props",
+      "Id": "obj\\Release\\net8.0\\staticwebassets\\msbuild.buildTransitive.monitor-services-api.props",
       "PackagePath": "buildTransitive\\monitor-services-api.props"
     },
     {
-      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.monitor-services-api.Microsoft.AspNetCore.StaticWebAssets.props",
+      "Id": "obj\\Release\\net8.0\\staticwebassets\\msbuild.monitor-services-api.Microsoft.AspNetCore.StaticWebAssets.props",
       "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
     }
   ],

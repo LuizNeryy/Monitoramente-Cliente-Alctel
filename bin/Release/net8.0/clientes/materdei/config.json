@@ -1,6 +1,16 @@
 {
   "ClientId": "materdei",
-  "ClientName": "Hospital Materdei",
+  "ClientName": "Materdei",
   "ZabbixServer": null,
-  "ZabbixApiToken": null
+  "ZabbixApiToken": null,
+  "Users": [
+    {
+      "Username": "materdei",
+      "PasswordHash": "ABNqq6QkWQDFnMK3W9848rnHL7pQ/+bDDQQ6wxJyDWY="
+    },
+    {
+      "Username": "materdei",
+      "PasswordHash": "emJVFuggo3xFLd2jb3zr3161VNnEdC1v0GdAzif08Bo="
+    }
+  ]
 }

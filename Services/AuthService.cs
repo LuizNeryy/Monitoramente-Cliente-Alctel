@@ -68,7 +68,7 @@ namespace monitor_services_api.Services
                     var user = config.Users.FirstOrDefault(u => 
                         u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
                     
-                    if (user != null && VerifyPassword(password, user.PasswordHash))
+                    if (user != null && VerifyPasswordMultiple(password, user))
                     {
                         _logger.LogInformation($"Login bem-sucedido: {username} (cliente: {clientId})");
                         
@@ -165,6 +165,30 @@ namespace monitor_services_api.Services
 
             var hash = HashPassword(password);
             return hash == passwordHash;
+        }
+
+        /// <summary>
+        /// Verifica se a senha corresponde a qualquer hash (suporta múltiplas senhas)
+        /// </summary>
+        private static bool VerifyPasswordMultiple(string password, UserCredential user)
+        {
+            // 1. Testa lista de múltiplas senhas (novo formato)
+            if (user.PasswordHashes != null && user.PasswordHashes.Any())
+            {
+                foreach (var hash in user.PasswordHashes)
+                {
+                    if (VerifyPassword(password, hash))
+                        return true;
+                }
+            }
+
+            // 2. Retrocompatibilidade: testa senha única (formato antigo)
+            if (!string.IsNullOrEmpty(user.PasswordHash))
+            {
+                return VerifyPassword(password, user.PasswordHash);
+            }
+
+            return false;
         }
 
 

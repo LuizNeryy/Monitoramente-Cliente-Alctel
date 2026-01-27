@@ -23,6 +23,7 @@ namespace monitor_services_api.Models
     public class UserCredential
     {
         public string Username { get; set; } = string.Empty;
-        public string PasswordHash { get; set; } = string.Empty;
+        public string? PasswordHash { get; set; } // Retrocompatibilidade
+        public List<string>? PasswordHashes { get; set; } // Múltiplas senhas
     }
 }

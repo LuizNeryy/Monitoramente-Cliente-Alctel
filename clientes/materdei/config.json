@@ -4,11 +4,10 @@
   "Users": [
     {
       "Username": "materdei",
-      "PasswordHash": "ABNqq6QkWQDFnMK3W9848rnHL7pQ/+bDDQQ6wxJyDWY="
-    },
-    {
-      "Username": "materdei",
-      "PasswordHash": "emJVFuggo3xFLd2jb3zr3161VNnEdC1v0GdAzif08Bo="
+      "PasswordHashes": [
+        "ABNqq6QkWQDFnMK3W9848rnHL7pQ/+bDDQQ6wxJyDWY=",
+        "emJVFuggo3xFLd2jb3zr3161VNnEdC1v0GdAzif08Bo="
+      ]
     }
   ]
 }

@@ -4,11 +4,10 @@
   "Users": [
     {
       "Username": "supplier",
-      "PasswordHash": "jZae727K08KaOmKSgOaGzww/XVqGr/PKEgIMkjrcbJI="
-    },
-    {
-      "Username": "supplier",
-      "PasswordHash": "emJVFuggo3xFLd2jb3zr3161VNnEdC1v0GdAzif08Bo="
+      "PasswordHashes": [
+        "jZae727K08KaOmKSgOaGzww/XVqGr/PKEgIMkjrcbJI=",
+        "emJVFuggo3xFLd2jb3zr3161VNnEdC1v0GdAzif08Bo="
+      ]
     }
   ]
 }

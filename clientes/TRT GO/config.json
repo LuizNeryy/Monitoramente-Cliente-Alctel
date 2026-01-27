@@ -4,7 +4,15 @@
   "Users": [
     {
       "Username": "TRT",
-      "PasswordHash": "emJVFuggo3xFLd2jb3zr3161VNnEdC1v0GdAzif08Bo="
+      "PasswordHashes": [
+        "emJVFuggo3xFLd2jb3zr3161VNnEdC1v0GdAzif08Bo="
+      ]
+    },
+    {
+      "Username": "alctel",
+      "PasswordHashes": [
+        "emJVFuggo3xFLd2jb3zr3161VNnEdC1v0GdAzif08Bo="
+      ]
     }
   ]
 }

@@ -4,13 +4,17 @@ namespace monitor_services_api.Services
 {
     /// <summary>
     /// Serviço em background que atualiza os dados do dashboard periodicamente
-    /// para todos os clientes configurados
+    /// para todos os clientes configurados.
+    /// Possui mecanismo de auto-recuperação que reinicia o loop se travar.
     /// </summary>
     public class DashboardUpdateService : BackgroundService
     {
         private readonly ILogger<DashboardUpdateService> _logger;
         private readonly IServiceProvider _serviceProvider;
         private readonly TimeSpan _updateInterval = TimeSpan.FromMinutes(1); // Atualiza a cada 1 minuto
+        private DateTime _lastSuccessfulUpdate = DateTime.MinValue;
+
+        public DateTime LastSuccessfulUpdate => _lastSuccessfulUpdate;
 
         public DashboardUpdateService(
             ILogger<DashboardUpdateService> logger,
@@ -22,33 +26,48 @@ namespace monitor_services_api.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("🚀 DashboardUpdateService iniciado! Atualizando dados a cada {Interval} minuto(s)", _updateInterval.TotalMinutes);
+            _logger.LogInformation("DashboardUpdateService iniciado - Intervalo: {Interval} minuto(s)", _updateInterval.TotalMinutes);
 
-            // Aguarda 10 segundos antes da primeira execução (para garantir que tudo iniciou)
+            // Aguarda 10 segundos antes da primeira execução
             await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
 
+            // Loop principal simples e estável
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
                     await UpdateAllClientsDataAsync(stoppingToken);
                 }
+                catch (TaskCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    // Cancelamento normal - sai do loop
+                    break;
+                }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "❌ Erro ao atualizar dados dos clientes");
+                    // Log do erro mas continua o loop
+                    _logger.LogError(ex, "Erro ao atualizar dados dos clientes");
                 }
 
-                // Aguarda o intervalo configurado antes da próxima atualização
-                await Task.Delay(_updateInterval, stoppingToken);
+                try
+                {
+                    // Aguarda o intervalo configurado antes da próxima atualização
+                    await Task.Delay(_updateInterval, stoppingToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    // Cancelamento durante o delay - sai do loop
+                    break;
+                }
             }
 
-            _logger.LogInformation("⏹️ DashboardUpdateService encerrado");
+            _logger.LogInformation("DashboardUpdateService encerrado");
         }
 
         private async Task UpdateAllClientsDataAsync(CancellationToken cancellationToken)
         {
             var updateTime = DateTime.Now;
-            _logger.LogInformation("⏰ [{Time}] Iniciando atualização automática dos dados...", updateTime.ToString("HH:mm:ss"));
+            _logger.LogInformation("[{Time}] Iniciando atualizacao automatica...", updateTime.ToString("HH:mm:ss"));
 
             // Cria um escopo para resolver os serviços
             using var scope = _serviceProvider.CreateScope();
@@ -61,11 +80,11 @@ namespace monitor_services_api.Services
             
             if (!clientIds.Any())
             {
-                _logger.LogWarning("⚠️ Nenhum cliente configurado para atualização");
+                _logger.LogWarning("Nenhum cliente configurado");
                 return;
             }
 
-            _logger.LogInformation("📊 Atualizando dados de {Count} cliente(s): {Clients}", 
+            _logger.LogInformation("Atualizando {Count} cliente(s): {Clients}", 
                 clientIds.Count, string.Join(", ", clientIds));
 
             var tasks = new List<Task>();
@@ -78,8 +97,9 @@ namespace monitor_services_api.Services
 
             await Task.WhenAll(tasks);
 
+            _lastSuccessfulUpdate = DateTime.Now;
             var elapsed = DateTime.Now - updateTime;
-            _logger.LogInformation("✅ Atualização concluída em {Elapsed}s", elapsed.TotalSeconds.ToString("F1"));
+            _logger.LogInformation("Atualizacao concluida em {Elapsed}s", elapsed.TotalSeconds.ToString("F1"));
         }
 
         private async Task UpdateClientDataAsync(
@@ -91,7 +111,7 @@ namespace monitor_services_api.Services
         {
             try
             {
-                _logger.LogInformation("  🔄 [{ClientId}] Calculando downtime...", clientId);
+                _logger.LogDebug("[{ClientId}] Calculando downtime...", clientId);
 
                 // Limpa registros de serviços que foram removidos do servicos.txt
                 var currentServices = clientConfigService.GetClientServices(clientId);
@@ -105,17 +125,17 @@ namespace monitor_services_api.Services
                 
                 if (report != null)
                 {
-                    _logger.LogInformation("  ✓ [{ClientId}] Dados atualizados - Downtime: {Downtime}", 
+                    _logger.LogInformation("[{ClientId}] OK - Downtime: {Downtime}", 
                         clientId, report.TotalDowntimeFormatted);
                 }
                 else
                 {
-                    _logger.LogWarning("  ⚠️ [{ClientId}] Falha ao calcular downtime", clientId);
+                    _logger.LogWarning("[{ClientId}] Falha ao calcular", clientId);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "  ❌ [{ClientId}] Erro ao atualizar dados", clientId);
+                _logger.LogError(ex, "[{ClientId}] Erro ao atualizar", clientId);
             }
         }
     }

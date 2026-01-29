@@ -565,7 +565,10 @@
         // Só define API_BASE se houver clientId
         const API_BASE = clientId ? `/api/${clientId}` : null;
         
-        // Função helper para fazer requisições autenticadas
+        // Cache de ETags para conditional requests
+        const etagCache = {};
+        
+        // Função helper para fazer requisições autenticadas com suporte a ETag
         async function fetchWithAuth(url, options = {}) {
             const token = localStorage.getItem('token');
             
@@ -573,6 +576,11 @@
                 ...options.headers,
                 'Authorization': `Bearer ${token}`
             };
+            
+            // Adiciona ETag se já temos uma versão cacheada
+            if (etagCache[url]) {
+                headers['If-None-Match'] = etagCache[url];
+            }
             
             const response = await fetch(url, { ...options, headers });
             
@@ -582,6 +590,18 @@
                 alert('Sua sessão expirou. Faça login novamente.');
                 window.location.href = '/login.html';
                 throw new Error('Não autorizado');
+            }
+            
+            // Se retornar 304 (Not Modified), dados não mudaram
+            if (response.status === 304) {
+                console.log(`[CACHE] Dados não modificados: ${url}`);
+                return { notModified: true };
+            }
+            
+            // Armazena ETag para próximas requisições
+            const etag = response.headers.get('ETag');
+            if (etag) {
+                etagCache[url] = etag;
             }
             
             return response;
@@ -596,8 +616,14 @@
 
         async function fetchDashboard() {
             try {
-                // Adiciona timestamp para evitar cache do navegador
-                const response = await fetchWithAuth(`${API_BASE}/dashboard?_t=${Date.now()}`);
+                const response = await fetchWithAuth(`${API_BASE}/dashboard`);
+                
+                // Se retornou 304 (dados não modificados), não precisa re-renderizar
+                if (response.notModified) {
+                    console.log('[CACHE] Dashboard não modificado, mantendo exibição atual');
+                    return;
+                }
+                
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
 
@@ -693,8 +719,14 @@
 
         async function fetchServices() {
             try {
-                // Adiciona timestamp para evitar cache do navegador
-                const response = await fetchWithAuth(`${API_BASE}/services?_t=${Date.now()}`);
+                const response = await fetchWithAuth(`${API_BASE}/services`);
+                
+                // Se retornou 304 (dados não modificados), não precisa re-renderizar
+                if (response.notModified) {
+                    console.log('[CACHE] Serviços não modificados, mantendo exibição atual');
+                    return;
+                }
+                
                 const services = await response.json() || [];
                 
                 // Cache global para uso em outros lugares
@@ -820,8 +852,13 @@
                 }
                 
                 // Busca relatório para pegar detalhes dos serviços
-                // Adiciona timestamp para evitar cache do navegador
-                const reportResponse = await fetchWithAuth(`${API_BASE}/downtime/report?_t=${Date.now()}`);
+                const reportResponse = await fetchWithAuth(`${API_BASE}/downtime/report`);
+                
+                // Se retornou 304 (dados não modificados), não precisa re-renderizar
+                if (reportResponse.notModified) {
+                    console.log('[CACHE] Relatório de downtime não modificado, mantendo exibição atual');
+                    return;
+                }
                 const reportData = await reportResponse.json();
                 
                 if (reportData && reportData.client_id) {
@@ -875,6 +912,12 @@
                     // Buscar detalhes completos
                     try {
                         const response = await fetch(`${API_BASE}/downtime/report`);
+                        
+                        // Se 304, usar dados cacheados
+                        if (response.status === 304) {
+                            console.log('[CACHE] Usando dados cacheados do relatório');
+                            return;
+                        }
                         const data = await response.json();
                         
                         if (data.error) {

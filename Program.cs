@@ -69,6 +69,10 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 builder.Services.AddHttpClient<IZabbixService, ZabbixService>()
+    .ConfigureHttpClient(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30); // Timeout de 30s para evitar travamentos
+    })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
         ServerCertificateCustomValidationCallback =
@@ -142,12 +146,37 @@ app.MapGet("/health", () =>
     return Results.Ok(payload);
 });
 
-// Usa logger em vez de Console � mais adequado para servi�o
+// Usa logger em vez de Console – mais adequado para serviço
 var logger = app.Logger;
 
 logger.LogInformation("============================================================");
 logger.LogInformation("Servidor de Monitoramento Iniciado!");
 logger.LogInformation("Dashboard: https://localhost:4000");
+
+// Health endpoint com informações de atualização
+app.MapGet("/health/detailed", (IServiceProvider services) =>
+{
+    var uptime = DateTime.UtcNow - startTimeUtc;
+    var dashboardService = services.GetServices<IHostedService>()
+        .OfType<DashboardUpdateService>()
+        .FirstOrDefault();
+    
+    var lastUpdate = dashboardService?.LastSuccessfulUpdate ?? DateTime.MinValue;
+    var timeSinceLastUpdate = DateTime.Now - lastUpdate;
+    
+    var payload = new
+    {
+        status = timeSinceLastUpdate.TotalMinutes > 5 ? "degraded" : "healthy",
+        environment = app.Environment.EnvironmentName,
+        started_at_utc = startTimeUtc.ToString("o"),
+        uptime = uptime.ToString("c"),
+        last_successful_update = lastUpdate == DateTime.MinValue ? "never" : lastUpdate.ToString("o"),
+        minutes_since_last_update = lastUpdate == DateTime.MinValue ? -1 : timeSinceLastUpdate.TotalMinutes,
+        warning = timeSinceLastUpdate.TotalMinutes > 5 ? "Serviço pode estar travado - última atualização há mais de 5 minutos" : null
+    };
+
+    return Results.Ok(payload);
+});
 logger.LogInformation("API Base: https://localhost:4000/api");
 logger.LogInformation("Zabbix Server: {ZabbixServer}",
     builder.Configuration["Zabbix:Server"]);

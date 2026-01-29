@@ -14,6 +14,9 @@ namespace monitor_services_api.Services
         private readonly ClientConfigService _clientConfig;
         private readonly ILogger<DowntimeCalculationService> _logger;
 
+        // Locks para evitar race condition na escrita de arquivos
+        private static readonly SemaphoreSlim _fileLock = new SemaphoreSlim(1, 1);
+
         // Novo: caminho do arquivo TXT de downtime
         private string GetDowntimeTxtPath(string clientId)
         {
@@ -30,6 +33,44 @@ namespace monitor_services_api.Services
             _zabbix = (ZabbixService)zabbix;
             _clientConfig = clientConfig;
             _logger = logger;
+            
+            // Limpa arquivos temporários órfãos na inicialização
+            CleanupOrphanedTempFiles();
+        }
+
+        /// <summary>
+        /// Remove arquivos .tmp órfãos que ficaram de escritas anteriores interrompidas
+        /// </summary>
+        private void CleanupOrphanedTempFiles()
+        {
+            try
+            {
+                var clientsPath = Path.Combine(AppContext.BaseDirectory, "clientes");
+                if (!Directory.Exists(clientsPath)) return;
+
+                var tempFiles = Directory.GetFiles(clientsPath, "*.tmp", SearchOption.AllDirectories);
+                foreach (var tempFile in tempFiles)
+                {
+                    try
+                    {
+                        File.Delete(tempFile);
+                        _logger.LogDebug($"Arquivo temporário órfão removido: {tempFile}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, $"Não foi possível remover arquivo temporário: {tempFile}");
+                    }
+                }
+                
+                if (tempFiles.Length > 0)
+                {
+                    _logger.LogInformation($"Limpeza concluída: {tempFiles.Length} arquivo(s) temporário(s) órfão(s) removido(s)");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Erro ao limpar arquivos temporários órfãos");
+            }
         }
 
         /// <summary>
@@ -73,7 +114,7 @@ namespace monitor_services_api.Services
             foreach (var serviceName in services)
             {
                 var serviceIp = _zabbix.GetServiceIp(serviceName);
-                _logger.LogInformation($"Verificando downtime de: {serviceName} ({serviceIp})");
+                _logger.LogDebug($"Verificando downtime de: {serviceName} ({serviceIp})");
 
                 // TODO: Adicionar verificação se o serviço existe no Zabbix
                 // Por enquanto, assume que existe se está no txt
@@ -104,6 +145,19 @@ namespace monitor_services_api.Services
             report.TotalDowntimeFormatted = FormatDurationFromMinutes(totalDowntimeMinutesRounded);
             report.ServicesCount = report.Services.Count; // SEMPRE usa a quantidade real retornada pelo Zabbix
             report.ServicesWithDowntime = report.Services.Count(s => s.TotalDowntimeSeconds > 0);
+
+            // Agrega incidentes ativos e resolvidos de todos os serviços
+            report.ActiveIncidents = report.Services
+                .SelectMany(s => s.Incidents)
+                .Where(i => i.IsActive)
+                .OrderByDescending(i => i.StartTime)
+                .ToList();
+            
+            report.ResolvedIncidents = report.Services
+                .SelectMany(s => s.Incidents)
+                .Where(i => !i.IsActive)
+                .OrderByDescending(i => i.StartTime)
+                .ToList();
 
             // Log detalhado - mostra diferença entre TXT e Zabbix
             _logger.LogInformation($"Serviços no TXT: {services.Count} | Processados REALMENTE pelo Zabbix: {report.Services.Count} | Com downtime: {report.ServicesWithDowntime}");
@@ -183,8 +237,8 @@ namespace monitor_services_api.Services
                     return (0, new List<IncidentDetail>());
                 }
 
-                _logger.LogInformation($"Encontrados {events.Count} eventos para {serviceName}");
-                _logger.LogInformation($"Período de busca: de {DateTimeOffset.FromUnixTimeSeconds(periodStart):yyyy-MM-dd HH:mm} até {DateTimeOffset.FromUnixTimeSeconds(now):yyyy-MM-dd HH:mm}");
+                _logger.LogDebug($"Encontrados {events.Count} eventos para {serviceName}");
+
 
                 // Coletar IDs de recuperação válidos
                 var recoveryIds = events
@@ -223,11 +277,8 @@ namespace monitor_services_api.Services
                     // FILTRO CRÍTICO: Ignora incidentes que começaram ANTES do período
                     if (startTime < periodStart)
                     {
-                        _logger.LogInformation($"[FILTRO] Incidente IGNORADO (fora do período de {days} dias): {evt.Name} - início: {DateTimeOffset.FromUnixTimeSeconds(startTime):yyyy-MM-dd HH:mm}");
                         continue;
                     }
-                    
-                    _logger.LogDebug($"[FILTRO] Incidente INCLUÍDO: {evt.Name} - início: {DateTimeOffset.FromUnixTimeSeconds(startTime):yyyy-MM-dd HH:mm}");
                     
                     long endTime;
                     bool isActive = false;
@@ -323,43 +374,67 @@ namespace monitor_services_api.Services
         /// </summary>
         private async Task UpdateDowntimeTxtAsync(string clientId, string serviceName, List<IncidentDetail> incidents)
         {
-            var txtPath = GetDowntimeTxtPath(clientId);
-            var tempPath = txtPath + ".tmp";
-            
-            var lines = new List<string>();
-            if (File.Exists(txtPath))
+            await _fileLock.WaitAsync();
+            try
             {
-                lines = (await File.ReadAllLinesAsync(txtPath)).ToList();
-            }
-
-            // Remove linhas antigas deste serviço
-            lines.RemoveAll(l => l.Contains($"Serviço: {serviceName} "));
-
-            foreach (var inc in incidents)
-            {
-                if (inc.IsActive)
-                {
-                    lines.Add($"[ABERTO] Serviço: {serviceName} | Início: {inc.StartTime:yyyy-MM-dd HH:mm:ss} | UnixStart: {((DateTimeOffset)inc.StartTime).ToUnixTimeSeconds()}");
-                }
-                else
-                {
-                    lines.Add($"[RESOLVIDO] Serviço: {serviceName} | Início: {inc.StartTime:yyyy-MM-dd HH:mm:ss} | Fim: {inc.EndTime:yyyy-MM-dd HH:mm:ss} | Duração: {inc.DurationFormatted} | Trigger: {inc.TriggerName}");
-                }
-            }
-
-            // Escreve em arquivo temporário primeiro
-            await File.WriteAllLinesAsync(tempPath, lines);
+                var txtPath = GetDowntimeTxtPath(clientId);
+                var tempPath = txtPath + ".tmp";
             
-            // Renomeia para o arquivo final (operação atômica)
-            File.Move(tempPath, txtPath, overwrite: true);
+                var lines = new List<string>();
+                if (File.Exists(txtPath))
+                {
+                    lines = (await File.ReadAllLinesAsync(txtPath)).ToList();
+                }
+
+                // Remove linhas antigas deste serviço
+                lines.RemoveAll(l => l.Contains($"Serviço: {serviceName} "));
+
+                foreach (var inc in incidents)
+                {
+                    if (inc.IsActive)
+                    {
+                        lines.Add($"[ABERTO] Serviço: {serviceName} | Início: {inc.StartTime:yyyy-MM-dd HH:mm:ss} | UnixStart: {((DateTimeOffset)inc.StartTime).ToUnixTimeSeconds()}");
+                    }
+                    else
+                    {
+                        lines.Add($"[RESOLVIDO] Serviço: {serviceName} | Início: {inc.StartTime:yyyy-MM-dd HH:mm:ss} | Fim: {inc.EndTime:yyyy-MM-dd HH:mm:ss} | Duração: {inc.DurationFormatted} | Trigger: {inc.TriggerName}");
+                    }
+                }
+
+                // Escreve em arquivo temporário primeiro
+                await File.WriteAllLinesAsync(tempPath, lines);
+                
+                // Renomeia para o arquivo final (operação atômica)
+                // Se falhar, o arquivo antigo permanece intacto
+                File.Move(tempPath, txtPath, overwrite: true);
+                
+                _logger.LogDebug($"Arquivo {txtPath} atualizado atomicamente via {tempPath}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Erro ao atualizar downtime.txt para {clientId}/{serviceName}");
+                // Se falhou, tenta limpar o arquivo temporário
+                var tempPath = GetDowntimeTxtPath(clientId) + ".tmp";
+                if (File.Exists(tempPath))
+                {
+                    try { File.Delete(tempPath); } catch { }
+                }
+                throw;
+            }
+            finally
+            {
+                _fileLock.Release();
+            }
         }
 
         /// <summary>
         /// Salva o relatório de downtime em arquivo JSON na pasta do cliente
         /// Usa escrita atômica (escreve em .tmp e depois renomeia) para evitar race conditions
+        /// O front-end NUNCA vai ler dados pela metade!
         /// </summary>
         private async Task SaveDowntimeReportAsync(string clientId, DowntimeReportResponse report)
         {
+            await _fileLock.WaitAsync();
             try
             {
                 var clientFolder = Path.Combine(AppContext.BaseDirectory, "clientes", clientId);
@@ -374,17 +449,30 @@ namespace monitor_services_api.Services
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 });
 
-                // Escreve em arquivo temporário primeiro
+                // PASSO 1: Escreve TUDO em arquivo temporário (frontend não vê)
                 await File.WriteAllTextAsync(tempFilePath, json);
                 
-                // Renomeia para o arquivo final (operação atômica - evita leitura corrompida)
+                // PASSO 2: Renomeia atomicamente (instantâneo - tudo ou nada)
+                // Se der erro aqui, o arquivo antigo permanece intacto no frontend
                 File.Move(tempFilePath, filePath, overwrite: true);
                 
-                _logger.LogInformation($"Relatório salvo em: {filePath}");
+                _logger.LogDebug($"Relatório de {clientId} salvo atomicamente ({json.Length} bytes)");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao salvar relatório de downtime");
+                
+                // Limpa arquivo temporário órfão se existir
+                var tempFilePath = Path.Combine(AppContext.BaseDirectory, "clientes", clientId, "downtime_report.json.tmp");
+                if (File.Exists(tempFilePath))
+                {
+                    try { File.Delete(tempFilePath); } catch { }
+                }
+                throw;
+            }
+            finally
+            {
+                _fileLock.Release();
             }
         }
 

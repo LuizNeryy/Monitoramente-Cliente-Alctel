@@ -106,6 +106,10 @@
         public int ServicesCount { get; set; }
         public int ServicesWithDowntime { get; set; }
         public List<ServiceDowntimeDetail> Services { get; set; } = new();
+        
+        // Incidentes agregados de todos os serviços
+        public List<IncidentDetail> ActiveIncidents { get; set; } = new();
+        public List<IncidentDetail> ResolvedIncidents { get; set; } = new();
     }
 
     public class ServiceDowntimeDetail

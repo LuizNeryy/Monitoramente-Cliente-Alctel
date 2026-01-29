@@ -56,8 +56,6 @@ namespace monitor_services_api.Services
             _http.DefaultRequestHeaders.Remove("Authorization");
             var token = _currentConfig.ZabbixApiToken ?? _defaultApiToken;
             _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-
-            Console.WriteLine($"✓ Zabbix configurado para cliente '{clientId}' ({_currentServices?.Count ?? 0} serviços no TXT)");
         }
 
         public string? GetServiceIp(string nomeServico)
@@ -107,7 +105,6 @@ namespace monitor_services_api.Services
 
                 if (result?.Error != null)
                 {
-                    Console.WriteLine($"Erro Zabbix: {result.Error.Message}");
                     return default;
                 }
 
@@ -133,7 +130,6 @@ namespace monitor_services_api.Services
             // Se não encontrou, tenta buscar por interface com esse IP
             if (!hosts.Any())
             {
-                Console.WriteLine($"Tentando busca alternativa para IP: {ip}");
                 hosts = await RequestAsync<List<ZabbixHost>>("host.get", new
                 {
                     output = new[] { "hostid", "host", "name", "status", "available" },

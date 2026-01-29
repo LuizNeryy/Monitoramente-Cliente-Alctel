@@ -121,12 +121,24 @@ namespace monitor_services_api.Controllers
                         .OrderBy(s => s.Name)
                         .ToList();
 
+                    // Cache por 60 segundos (sincronizado com BackgroundService)
+                    var etag = $"\"{report.GeneratedAt.Ticks}\"";
+                    Response.Headers.Append("Cache-Control", "public, max-age=60");
+                    Response.Headers.Append("Last-Modified", report.GeneratedAt.ToUniversalTime().ToString("R"));
+                    Response.Headers.Append("ETag", etag);
+                    
+                    // Se cliente já tem a versão mais recente, retorna 304
+                    if (Request.Headers.ContainsKey("If-None-Match") && Request.Headers["If-None-Match"] == etag)
+                    {
+                        return StatusCode(304);
+                    }
+                    
                     return Ok(services);
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SERVICES] Erro ao ler relatório: {ex.Message}");
+                // Erro ao ler relatório - usa fallback
             }
 
             // FALLBACK: Se não tiver arquivo, retorna lista básica do servicos.txt
@@ -150,81 +162,47 @@ namespace monitor_services_api.Controllers
             if (!ConfigureClientContext(clientId))
                 return NotFound(new { error = $"Cliente '{clientId}' não encontrado" });
 
-            var allProblems = new List<ProblemResponse>();
-            var timeFrom = from ?? ToUnixTime(DateTime.Now.AddDays(-30));
+            // ===== LÊ DO CACHE (JSON) - ZERO CHAMADAS AO ZABBIX =====
+            var report = await _downtimeCalculation.GetSavedReportAsync(clientId);
             
-            Console.WriteLine($"[PROBLEMS] Buscando problemas para cliente '{clientId}' (resolved={resolved}, from={timeFrom})");
-
-            // Lista de serviços monitorados (do txt)
-            var monitoredServices = _zabbix.GetMonitoredServices().Select(s => s.Trim().ToLowerInvariant()).ToHashSet();
-
-            foreach (var hostIp in _zabbix.GetUniqueHostIps())
+            if (report == null)
             {
-                var hosts = await _zabbix.GetHostsAsync(hostIp);
-                if (!hosts.Any())
-                {
-                    Console.WriteLine($"⚠️ Host não encontrado para IP: {hostIp}");
+                return StatusCode(503, new { error = "Dados ainda não disponíveis. Aguarde o próximo ciclo de atualização." });
+            }
+
+            var allProblems = new List<ProblemResponse>();
+
+            // Converte incidentes do relatório em ProblemResponse
+            foreach (var service in report.Services)
+            {
+                if (service.Incidents == null || !service.Incidents.Any())
                     continue;
-                }
 
-                var problems = await _zabbix.GetProblemsAsync(hosts[0].Hostid, timeFrom);
-
-                foreach (var p in problems)
+                foreach (var incident in service.Incidents)
                 {
-                    // Extrai nome do serviço do problema
-                    var problemName = p.Name;
-                    if (problemName.Contains('"'))
-                    {
-                        var start = problemName.IndexOf('"') + 1;
-                        var end = problemName.LastIndexOf('"');
-                        if (start > 0 && end > start) problemName = problemName[start..end];
-                    }
-                    else if (problemName.Contains(':'))
-                    {
-                        problemName = problemName.Split(':', 2)[1].Trim();
-                    }
-                    var problemNameLower = problemName.Trim().ToLowerInvariant();
+                    // Filtro: resolved=1 retorna apenas resolvidos, resolved=0/null retorna apenas ativos
+                    if (resolved == 1 && incident.IsActive) continue;
+                    if (resolved == 0 && !incident.IsActive) continue;
+
+                    // Determina severidade baseada no nome do trigger
+                    var severity = "Média";
+                    var severityLevel = "3";
                     
-                    // Filtra apenas serviços monitorados (do txt)
-                    if (!monitoredServices.Contains(problemNameLower)) continue;
-
-                    var clock = long.Parse(p.Clock);
-                    var rClock = long.TryParse(p.R_clock, out var r) && r > 0 ? r : 0;
-                    var now = ToUnixTime(DateTime.Now);
-                    var duration = (rClock > 0 ? rClock : now) - clock;
-
-                    // resolved=1: retorna apenas problemas resolvidos
-                    if (resolved == 1)
+                    if (incident.TriggerName.Contains("not running", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (rClock > 0 && rClock >= timeFrom)
-                        {
-                            allProblems.Add(new ProblemResponse
-                            {
-                                Name = p.Name,
-                                Severity = PriorityMap.GetValueOrDefault(p.Severity, "Desconhecida"),
-                                SeverityLevel = p.Severity,
-                                Status = "Resolvido",
-                                Started = FromUnixTime(clock).ToString("yyyy-MM-dd HH:mm:ss"),
-                                DurationMinutes = Math.Round(duration / 60.0, 2)
-                            });
-                        }
+                        severity = "Alta";
+                        severityLevel = "4";
                     }
-                    // resolved=0 ou null: retorna apenas problemas ativos
-                    else
+
+                    allProblems.Add(new ProblemResponse
                     {
-                        if (rClock == 0)
-                        {
-                            allProblems.Add(new ProblemResponse
-                            {
-                                Name = p.Name,
-                                Severity = PriorityMap.GetValueOrDefault(p.Severity, "Desconhecida"),
-                                SeverityLevel = p.Severity,
-                                Status = "Ativo",
-                                Started = FromUnixTime(clock).ToString("yyyy-MM-dd HH:mm:ss"),
-                                DurationMinutes = Math.Round(duration / 60.0, 2)
-                            });
-                        }
-                    }
+                        Name = incident.TriggerName,
+                        Severity = severity,
+                        SeverityLevel = severityLevel,
+                        Status = incident.IsActive ? "Ativo" : "Resolvido",
+                        Started = incident.StartTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                        DurationMinutes = Math.Round(incident.DurationSeconds / 60.0, 2)
+                    });
                 }
             }
 
@@ -232,8 +210,19 @@ namespace monitor_services_api.Controllers
                 .OrderByDescending(p => p.SeverityLevel)
                 .ThenByDescending(p => p.Started)
                 .ToList();
-
-            Console.WriteLine($"[PROBLEMS] Total retornado: {orderedProblems.Count} (ativos={orderedProblems.Count(p => p.Status == "Ativo")}, resolvidos={orderedProblems.Count(p => p.Status == "Resolvido")})");
+            
+            // Cache por 60 segundos
+            var etag = $"\"{report.GeneratedAt.Ticks}\"";
+            Response.Headers.Append("Cache-Control", "public, max-age=60");
+            Response.Headers.Append("Last-Modified", report.GeneratedAt.ToUniversalTime().ToString("R"));
+            Response.Headers.Append("ETag", etag);
+            
+            // Se cliente já tem a versão mais recente, retorna 304
+            if (Request.Headers.ContainsKey("If-None-Match") && Request.Headers["If-None-Match"] == etag)
+            {
+                return StatusCode(304);
+            }
+            
             return Ok(orderedProblems);
         }
 
@@ -269,15 +258,22 @@ namespace monitor_services_api.Controllers
                 }
             }
 
-            Console.WriteLine($"[DASHBOARD][JSON] Total Downtime: {report.TotalDowntimeFormatted}");
-            Console.WriteLine($"[DASHBOARD][JSON] Serviços: {report.ServicesCount}");
-            Console.WriteLine($"[DASHBOARD][JSON] Disponibilidade: {availability:F2}%");
             Console.WriteLine($"[DASHBOARD][JSON] Incidentes Ativos: {activeIncidentsCount}");
-            Console.WriteLine($"[DASHBOARD][JSON] Incidentes Resolvidos: {resolvedIncidentsCount}");
-            Console.WriteLine($"[DASHBOARD][JSON] Total de Incidentes: {activeIncidentsCount + resolvedIncidentsCount}");
 
             // Pega IPs dos hosts do config do Zabbix (não faz chamada, apenas lê config)
             var hostIps = _zabbix.GetUniqueHostIps().ToList();
+
+            // Cache por 60 segundos (sincronizado com BackgroundService)
+            var etag = $"\"{report.GeneratedAt.Ticks}\"";
+            Response.Headers.Append("Cache-Control", "public, max-age=60");
+            Response.Headers.Append("Last-Modified", report.GeneratedAt.ToUniversalTime().ToString("R"));
+            Response.Headers.Append("ETag", etag);
+            
+            // Se cliente já tem a versão mais recente, retorna 304
+            if (Request.Headers.ContainsKey("If-None-Match") && Request.Headers["If-None-Match"] == etag)
+            {
+                return StatusCode(304);
+            }
 
             return Ok(new DashboardResponse
             {
@@ -362,6 +358,18 @@ namespace monitor_services_api.Controllers
                 if (report == null)
                     return NotFound(new { error = "Nenhum relatório encontrado. Execute o cálculo primeiro." });
 
+                // Cache por 60 segundos
+                var etag = $"\"{report.GeneratedAt.Ticks}\"";
+                Response.Headers.Append("Cache-Control", "public, max-age=60");
+                Response.Headers.Append("Last-Modified", report.GeneratedAt.ToUniversalTime().ToString("R"));
+                Response.Headers.Append("ETag", etag);
+                
+                // Se cliente já tem a versão mais recente, retorna 304
+                if (Request.Headers.ContainsKey("If-None-Match") && Request.Headers["If-None-Match"] == etag)
+                {
+                    return StatusCode(304);
+                }
+
                 return Ok(report);
             }
             catch (Exception ex)
@@ -386,6 +394,18 @@ namespace monitor_services_api.Controllers
                 
                 if (report == null)
                     return StatusCode(503, new { error = "Dados ainda não disponíveis. Aguarde o próximo ciclo de atualização." });
+
+                // Cache por 60 segundos
+                var etag = $"\"{report.GeneratedAt.Ticks}\"";
+                Response.Headers.Append("Cache-Control", "public, max-age=60");
+                Response.Headers.Append("Last-Modified", report.GeneratedAt.ToUniversalTime().ToString("R"));
+                Response.Headers.Append("ETag", etag);
+                
+                // Se cliente já tem a versão mais recente, retorna 304
+                if (Request.Headers.ContainsKey("If-None-Match") && Request.Headers["If-None-Match"] == etag)
+                {
+                    return StatusCode(304);
+                }
 
                 // Retorna apenas o resumo
                 return Ok(new
